@@ -180,6 +180,55 @@
     });
   }
 
+  /* ---------- ERISIM KODU ---------- */
+  /* Yeni müşteriye kod vermek için: aşağıdaki listeye tırnak içinde yeni bir kod ekle, virgülle ayır. */
+  var VALID_CODES = ["HAL2026"];
+  var LS_ACCESS = "hal_access_ok";
+
+  function hasAccess() {
+    try { return localStorage.getItem(LS_ACCESS) === "1"; } catch (e) { return false; }
+  }
+  function grantAccess() {
+    try { localStorage.setItem(LS_ACCESS, "1"); } catch (e) {}
+  }
+  function checkCode(input) {
+    var norm = String(input || "").trim().toUpperCase();
+    return VALID_CODES.some(function (c) { return c.toUpperCase() === norm; });
+  }
+
+  var gateError = false;
+
+  function renderGate() {
+    document.getElementById("root").innerHTML =
+      '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;">' +
+        '<div class="eyebrow" style="margin-bottom:6px;">Hal Fiş Hesabı</div>' +
+        '<h1 style="color:#F7F3E8;font-size:22px;margin:0 0 8px;text-align:center;">Erişim Kodu Gerekli</h1>' +
+        '<p style="color:#B8A98A;font-size:14px;text-align:center;margin:0 0 20px;max-width:280px;">Bu uygulama ücretlidir. Satın aldığında sana verilen kodu gir.</p>' +
+        '<div class="card card-pad" style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:12px;">' +
+          '<input id="gateInput" placeholder="Erişim kodu" style="width:100%;background:transparent;border:none;border-bottom:1px solid #D9CBA8;padding-bottom:8px;font-size:16px;color:#2B2118;outline:none;text-transform:uppercase;" autocapitalize="characters">' +
+          (gateError ? '<div style="color:#C1442E;font-size:13px;font-weight:600;">Kod geçersiz, tekrar dene.</div>' : "") +
+          '<button class="btn btn-green" id="gateBtn">Giriş</button>' +
+        "</div>" +
+      "</div>";
+    var btn = document.getElementById("gateBtn");
+    var inp = document.getElementById("gateInput");
+    btn.addEventListener("click", submitGate);
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") submitGate(); });
+    inp.focus();
+  }
+
+  function submitGate() {
+    var inp = document.getElementById("gateInput");
+    if (checkCode(inp.value)) {
+      grantAccess();
+      gateError = false;
+      render();
+    } else {
+      gateError = true;
+      renderGate();
+    }
+  }
+
   function newRow() { return { id: uid(), urun: "", kg: "", fiyat: "", oran: "13", tarih: todayISO() }; }
 
   var state = {
@@ -606,7 +655,7 @@
     }
   }
 
-  render();
+  if (hasAccess()) { render(); } else { renderGate(); }
 })();
 </script>
 </body>
