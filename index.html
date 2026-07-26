@@ -475,7 +475,8 @@
     var toplamIsci = state.ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "isci"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var toplamKira = state.ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "kira"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var toplamIlac = state.ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "ilac"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
-    var kalan = toplamSatis + toplamBakiye - toplamOdeme - toplamIsci - toplamKira - toplamIlac;
+    var toplamFide = state.ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "fide"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var kalan = toplamSatis + toplamBakiye - toplamOdeme - toplamIsci - toplamKira - toplamIlac - toplamFide;
 
     var formHtml = "";
     if (state.odemeOpen) {
@@ -576,13 +577,14 @@
           (toplamIsci > 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">İşçi Parası</span><span class="val muted">− ' + tl(toplamIsci) + " ₺</span></div>" : "") +
           (toplamKira > 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">Kira Parası</span><span class="val muted">− ' + tl(toplamKira) + " ₺</span></div>" : "") +
           (toplamIlac > 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">İlaç & Gübre Parası</span><span class="val muted">− ' + tl(toplamIlac) + " ₺</span></div>" : "") +
+          (toplamFide > 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">Fide Parası</span><span class="val muted">− ' + tl(toplamFide) + " ₺</span></div>" : "") +
           '<div class="hr" style="margin:8px 0;"></div>' +
           '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
           (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Aldığın para kazandığından fazla — hale borçlusun.</div>' : "") +
         "</div>" +
         '<button class="btn btn-red" id="odemeToggleBtn">+ HALDEN PARA ALDIM</button>' +
         formHtml +
-        '<button class="btn-small" id="giderToggleBtn" style="width:100%;background:#C1442E;">+ GİDER EKLE (İşçi / Kira / İlaç-Gübre)</button>' +
+        '<button class="btn-small" id="giderToggleBtn" style="width:100%;background:#C1442E;">+ GİDER EKLE (İşçi / Kira / İlaç-Gübre / Fide)</button>' +
         giderFormHtml +
         '<button class="btn btn-green" id="bakiyeToggleBtn">+ ESKİ / DEVREDEN BAKİYE EKLE</button>' +
         bakiyeFormHtml +
@@ -651,8 +653,9 @@
     var isci = ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "isci"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var kira = ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "kira"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var ilac = ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "ilac"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
-    var gider = isci + kira + ilac;
-    return { satis: satis, bakiye: bakiye, odeme: odeme, isci: isci, kira: kira, ilac: ilac, gider: gider, kalan: satis + bakiye - odeme - gider };
+    var fide = ledger.filter(function (t) { return t.tip === "gider" && t.giderTur === "fide"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var gider = isci + kira + ilac + fide;
+    return { satis: satis, bakiye: bakiye, odeme: odeme, isci: isci, kira: kira, ilac: ilac, fide: fide, gider: gider, kalan: satis + bakiye - odeme - gider };
   }
 
   function renderGecmisSezonlar() {
@@ -684,7 +687,7 @@
           '<div class="line"><span class="lbl">Satış</span><span class="val">' + tl(t.satis) + " ₺</span></div>" +
           (t.bakiye !== 0 ? '<div class="line" style="margin-top:4px;"><span class="lbl">Devreden Bakiye</span><span class="val">' + (t.bakiye < 0 ? "− " : "") + tl(Math.abs(t.bakiye)) + " ₺</span></div>" : "") +
           '<div class="line" style="margin-top:4px;"><span class="lbl">Alınan Ödeme</span><span class="val muted">− ' + tl(t.odeme) + " ₺</span></div>" +
-          (t.gider > 0 ? '<div class="line" style="margin-top:4px;"><span class="lbl">Giderler (İşçi/Kira/İlaç)</span><span class="val muted">− ' + tl(t.gider) + " ₺</span></div>" : "") +
+          (t.gider > 0 ? '<div class="line" style="margin-top:4px;"><span class="lbl">Giderler (İşçi/Kira/İlaç/Fide)</span><span class="val muted">− ' + tl(t.gider) + " ₺</span></div>" : "") +
           '<div class="hr" style="margin:8px 0;"></div>' +
           '<div class="line"><span class="lbl" style="font-weight:700;">Kalan</span><span style="font-weight:700;color:' + (t.kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (t.kalan < 0 ? "− " : "") + tl(Math.abs(t.kalan)) + " ₺</span></div>" +
           '<button class="btn-small" style="margin-top:10px;width:100%;" data-toggle-sezon="' + s.id + '">' + (acik ? "Detayı Gizle" : "Detayı Göster") + "</button>" +
@@ -750,7 +753,7 @@
     render();
   }
 
-  var GIDER_ETIKET = { isci: "İşçi Parası", kira: "Kira Parası", ilac: "İlaç & Gübre Parası" };
+  var GIDER_ETIKET = { isci: "İşçi Parası", kira: "Kira Parası", ilac: "İlaç & Gübre Parası", fide: "Fide Parası" };
 
   function giderKaydet() {
     var t = parseNum(state.giderTutar);
@@ -934,7 +937,7 @@
           '<canvas id="chartSatis" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">🧾 Toplam Gider (Ödeme + İşçi + Kira + İlaç-Gübre)</div>' +
+          '<div class="prod-name" style="margin-bottom:8px;">🧾 Toplam Gider (Ödeme + İşçi + Kira + İlaç-Gübre + Fide)</div>' +
           '<canvas id="chartGider" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         '<div class="card card-pad">' +
