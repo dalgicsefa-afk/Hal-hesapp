@@ -180,23 +180,29 @@
     });
   }
 
-  /* ---------- ERISIM KODU ---------- */
-  /* Yeni müşteriye kod vermek için: aşağıdaki listeye tırnak içinde yeni bir kod ekle, virgülle ayır. */
-  var VALID_CODES = ["HAL2026"];
-  var LS_ACCESS = "hal_access_ok";
+  /* ---------- ERISIM KODU (uzaktan doğrulanır, iptal edilebilir) ---------- */
+  var LS_ACCESS = "hal_access_code";
+  var CODES_URL = "./codes.json";
 
-  function hasAccess() {
-    try { return localStorage.getItem(LS_ACCESS) === "1"; } catch (e) { return false; }
-  }
-  function grantAccess() {
-    try { localStorage.setItem(LS_ACCESS, "1"); } catch (e) {}
-  }
-  function checkCode(input) {
-    var norm = String(input || "").trim().toUpperCase();
-    return VALID_CODES.some(function (c) { return c.toUpperCase() === norm; });
+  function fetchValidCodes() {
+    return fetch(CODES_URL + "?t=" + Date.now(), { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : { valid: [] }; })
+      .then(function (data) { return (data && data.valid) ? data.valid.map(function (c) { return String(c).toUpperCase(); }) : []; })
+      .catch(function () { return null; }); // null => internet/dosya erişilemedi
   }
 
-  var gateError = false;
+  function getSavedCode() {
+    try { return localStorage.getItem(LS_ACCESS); } catch (e) { return null; }
+  }
+  function saveCode(code) {
+    try { localStorage.setItem(LS_ACCESS, code.toUpperCase()); } catch (e) {}
+  }
+  function clearCode() {
+    try { localStorage.removeItem(LS_ACCESS); } catch (e) {}
+  }
+
+  var gateError = "";
+  var gateChecking = false;
 
   function renderGate() {
     document.getElementById("root").innerHTML =
@@ -206,8 +212,8 @@
         '<p style="color:#B8A98A;font-size:14px;text-align:center;margin:0 0 20px;max-width:280px;">Bu uygulama ücretlidir. Satın aldığında sana verilen kodu gir.</p>' +
         '<div class="card card-pad" style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:12px;">' +
           '<input id="gateInput" placeholder="Erişim kodu" style="width:100%;background:transparent;border:none;border-bottom:1px solid #D9CBA8;padding-bottom:8px;font-size:16px;color:#2B2118;outline:none;text-transform:uppercase;" autocapitalize="characters">' +
-          (gateError ? '<div style="color:#C1442E;font-size:13px;font-weight:600;">Kod geçersiz, tekrar dene.</div>' : "") +
-          '<button class="btn btn-green" id="gateBtn">Giriş</button>' +
+          (gateError ? '<div style="color:#C1442E;font-size:13px;font-weight:600;">' + gateError + "</div>" : "") +
+          '<button class="btn btn-green" id="gateBtn">' + (gateChecking ? "Kontrol ediliyor..." : "Giriş") + "</button>" +
         "</div>" +
       "</div>";
     var btn = document.getElementById("gateBtn");
@@ -219,14 +225,32 @@
 
   function submitGate() {
     var inp = document.getElementById("gateInput");
-    if (checkCode(inp.value)) {
-      grantAccess();
-      gateError = false;
-      render();
-    } else {
-      gateError = true;
-      renderGate();
-    }
+    var entered = String(inp.value || "").trim();
+    if (!entered) return;
+    gateChecking = true;
+    gateError = "";
+    renderGate();
+    fetchValidCodes().then(function (list) {
+      gateChecking = false;
+      if (list === null) {
+        gateError = "İnternet bağlantısı gerekiyor, kontrol edilemedi.";
+        renderGate();
+        return;
+      }
+      if (list.indexOf(entered.toUpperCase()) !== -1) {
+        saveCode(entered);
+        render();
+      } else {
+        gateError = "Kod geçersiz, tekrar dene.";
+        renderGate();
+      }
+    });
+  }
+
+  function startApp() {
+    var saved = getSavedCode();
+    if (saved) { render(); return; } // daha önce doğrulanmış cihaz: bir daha kontrol edilmez, hep girer
+    renderGate();
   }
 
   function newRow() { return { id: uid(), urun: "", kg: "", fiyat: "", oran: "13", tarih: todayISO() }; }
@@ -655,7 +679,7 @@
     }
   }
 
-  if (hasAccess()) { render(); } else { renderGate(); }
+  startApp();
 })();
 </script>
 </body>
