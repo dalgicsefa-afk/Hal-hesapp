@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Hal Fiş Hesabı</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #2B2118;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #2B2118;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .disp { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-weight: 700; letter-spacing: -0.01em; }
+
+  /* Header */
+  .header { background:#2B2118; padding:32px 20px 24px; border-bottom:4px dashed #4A7A3F; position:relative; }
+  .hamburger { position:absolute; left:20px; top:32px; background:none; border:none; padding:4px; display:flex; flex-direction:column; gap:5px; }
+  .hamburger span { width:24px; height:3px; background:#E8D9B8; border-radius:2px; display:block; }
+  .header-center { text-align:center; }
+  .eyebrow { color:#C1442E; font-size:12px; text-transform:uppercase; font-weight:700; letter-spacing:0.08em; }
+  .header h1 { color:#F7F3E8; font-size:24px; margin:4px 0 0; }
+  .header p { color:#B8A98A; font-size:14px; margin:4px 0 0; }
+
+  /* Drawer */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:40; display:none; }
+  .overlay.show { display:block; }
+  .drawer { position:fixed; top:0; left:0; height:100%; width:260px; background:#1A140D; z-index:50;
+    border-right:4px solid #C1442E; transform:translateX(-100%); transition:transform 0.2s ease; }
+  .drawer.open { transform:translateX(0); }
+  .drawer-title { color:#F7F3E8; font-weight:700; font-size:18px; padding:32px 20px 24px; border-bottom:1px solid #3A2E20; }
+  .drawer-item { display:block; width:100%; text-align:left; background:none; border:none; border-bottom:1px solid #3A2E20;
+    color:#B8A98A; font-size:16px; font-weight:500; padding:16px 20px; }
+  .drawer-item.active { background:#3A2E20; color:#F7F3E8; }
+
+  /* Content */
+  .content { padding:20px 16px 10px; display:flex; flex-direction:column; gap:16px; }
+  .content.with-bar { padding-bottom:160px; }
+
+  .card { position:relative; background:#F7F3E8; border-radius:10px; box-shadow:0 4px 14px rgba(0,0,0,0.25); overflow:hidden; }
+  .card-pad { padding:16px; }
+  .row-notch { position:absolute; left:-8px; top:16px; width:16px; height:16px; background:#2B2118; border-radius:50%; }
+
+  .row-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px 4px; }
+  .row-head .tag { color:#C1442E; font-weight:700; font-size:14px; }
+  .icon-btn { background:none; border:none; color:#8A7A5E; font-size:16px; padding:4px; }
+
+  .select-wrap { position:relative; border-bottom:1px solid #D9CBA8; }
+  select.urun-select {
+    width:100%; appearance:none; -webkit-appearance:none; background:transparent; border:none;
+    padding:0 16px 10px; font-size:16px; font-weight:500; color:#2B2118; outline:none;
+  }
+  .chevron { pointer-events:none; position:absolute; right:16px; top:6px; color:#A89878; }
+
+  .name-input {
+    width:100%; background:transparent; border:none; border-bottom:1px solid #D9CBA8;
+    padding:0 16px 10px; font-size:16px; font-weight:500; color:#2B2118; outline:none;
+  }
+  .name-input::placeholder { color:#A89878; }
+
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; border-bottom:1px solid #D9CBA8; }
+  .grid3 > div { padding:10px 12px; border-left:1px solid #D9CBA8; }
+  .grid3 > div:first-child { border-left:none; }
+  .field-label { font-size:10px; text-transform:uppercase; letter-spacing:0.03em; color:#A89878; margin-bottom:2px; }
+  .field-input { width:100%; background:transparent; border:none; outline:none; font-size:16px; font-weight:600; color:#2B2118; }
+  .field-input::placeholder { color:#A89878; }
+
+  .lines { padding:12px 16px; display:flex; flex-direction:column; gap:4px; }
+  .line { display:flex; justify-content:space-between; font-size:14px; }
+  .line .lbl { color:#5C4A34; }
+  .line .lbl.muted { color:#A89878; }
+  .line .val { color:#2B2118; font-weight:500; }
+  .line .val.muted { color:#B0664F; }
+  .line .val.strong { color:#2B6B24; font-weight:700; font-size:16px; }
+  .hr { height:1px; background:#D9CBA8; margin:4px 0; }
+
+  .btn { display:flex; align-items:center; justify-content:center; gap:8px; padding:13px; border-radius:10px; border:none; font-weight:700; font-size:15px; width:100%; }
+  .btn-outline { background:none; border:2px dashed #5C4A34; color:#E8D9B8; }
+  .btn-green { background:#4A7A3F; color:#F7F3E8; }
+  .btn-red { background:#C1442E; color:#F7F3E8; }
+  .btn-small { width:auto; padding:10px 18px; border-radius:10px; border:none; font-weight:700; font-size:14px; background:#4A7A3F; color:#F7F3E8; }
+
+  .saved-msg { background:#4A7A3F; color:#F7F3E8; font-size:14px; font-weight:600; border-radius:10px; padding:12px; text-align:center; }
+
+  .sticky-bar { position:fixed; bottom:0; left:0; right:0; background:#1A140D; border-top:4px solid #C1442E; padding:16px 20px; }
+  .sbar-row { display:flex; justify-content:space-between; align-items:baseline; }
+  .sbar-label { color:#B8A98A; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; }
+  .sbar-val { color:#F7F3E8; font-weight:500; }
+  .sbar-val.warn { color:#E8A33D; }
+  .sbar-total { display:flex; justify-content:space-between; align-items:baseline; margin-top:8px; padding-top:8px; border-top:1px solid #3A2E20; }
+  .sbar-total .lbl { color:#F7F3E8; font-weight:700; font-size:17px; }
+  .sbar-total .val { color:#4A9A3F; font-weight:700; font-size:24px; }
+
+  .empty-note { color:#8A7A5E; font-size:14px; padding:0 4px; }
+
+  .add-row { display:flex; gap:8px; }
+  .add-row input { flex:1; background:transparent; border:none; border-bottom:1px solid #D9CBA8; outline:none; font-size:16px; padding-bottom:6px; color:#2B2118; }
+  .add-row input::placeholder { color:#A89878; }
+
+  .prod-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .prod-name { color:#C1442E; font-weight:700; font-size:16px; }
+
+  .txn { background:#F7F3E8; border-radius:10px; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; }
+  .txn-desc { color:#2B2118; font-weight:500; font-size:14px; }
+  .txn-meta { color:#A89878; font-size:12px; }
+  .txn-amt { font-weight:700; }
+  .txn-amt.plus { color:#2B6B24; }
+  .txn-amt.minus { color:#B0664F; }
+  .txn-del { background:none; border:none; color:#C9BB98; font-size:14px; padding:0 4px; }
+
+  .section-label { color:#B8A98A; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; margin:4px 4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var LS_LEDGER = "hal_defteri_v1";
+  var LS_URUNLER = "hal_urunler_v1";
+
+  function loadJSON(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function saveJSON(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  function uid() { return Math.random().toString(36).slice(2, 9); }
+  function bugun() {
+    var d = new Date();
+    return d.toLocaleDateString("tr-TR");
+  }
+  function tl(n) { return (n || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function kgFmt(n) { return (n || 0).toLocaleString("tr-TR", { maximumFractionDigits: 2 }); }
+  function parseNum(str) { return parseFloat(String(str || "").replace(/\./g, "").replace(",", ".")) || 0; }
+  function formatInput(raw) {
+    var value = String(raw || "").replace(/[^0-9,]/g, "");
+    var commaIndex = value.indexOf(",");
+    if (commaIndex !== -1) {
+      value = value.slice(0, commaIndex + 1) + value.slice(commaIndex + 1).replace(/,/g, "");
+    }
+    var parts = value.split(",");
+    var intPart = parts[0] || "";
+    var decPart = parts.length > 1 ? parts[1] : undefined;
+    intPart = intPart.replace(/^0+(?=\d)/, "");
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return decPart !== undefined ? intPart + "," + decPart : intPart;
+  }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function newRow() { return { id: uid(), urun: "", kg: "", fiyat: "", oran: "8" }; }
+
+  var state = {
+    view: "calc",
+    drawerOpen: false,
+    rows: [newRow()],
+    ledger: loadJSON(LS_LEDGER, []),
+    urunler: loadJSON(LS_URUNLER, []),
+    savedMsg: false,
+    odemeOpen: false,
+    odemeTutar: "",
+    odemeAciklama: "",
+    yeniUrunAd: "",
+  };
+
+  function persistLedger() { saveJSON(LS_LEDGER, state.ledger); }
+  function persistUrunler() { saveJSON(LS_URUNLER, state.urunler); }
+
+  function calcRow(r) {
+    var kg = parseNum(r.kg);
+    var fiyat = parseNum(r.fiyat);
+    var oran = parseNum(r.oran);
+    var tutar = kg * fiyat;
+    var komisyon = tutar * (oran / 100);
+    var net = tutar - komisyon;
+    return { kg: kg, fiyat: fiyat, oran: oran, tutar: tutar, komisyon: komisyon, net: net };
+  }
+
+  /* ---------- RENDER: SHELL ---------- */
+
+  function render() {
+    var root = document.getElementById("root");
+    root.innerHTML = renderDrawer() + renderHeader() + renderContent();
+    bindEvents();
+  }
+
+  function renderDrawer() {
+    var items = [
+      { v: "calc", label: "🧮 Fiş Hesapla" },
+      { v: "kasa", label: "💰 Kasa Defterim" },
+      { v: "urunler", label: "📦 Ürünlerim" }
+    ];
+    var itemsHtml = items.map(function (it) {
+      return '<button class="drawer-item ' + (state.view === it.v ? "active" : "") + '" data-view="' + it.v + '">' + it.label + "</button>";
+    }).join("");
+    return (
+      '<div class="overlay ' + (state.drawerOpen ? "show" : "") + '" id="overlay"></div>' +
+      '<div class="drawer ' + (state.drawerOpen ? "open" : "") + '">' +
+        '<div class="drawer-title">Menü</div>' +
+        itemsHtml +
+      "</div>"
+    );
+  }
+
+  function renderHeader() {
+    var titles = { calc: "Komisyon Hesaplayıcı", kasa: "Kasa Defterim", urunler: "Ürünlerim" };
+    var subs = {
+      calc: "Kg, fiyat ve komisyon oranını gir.",
+      kasa: "Ne kazandın, ne aldın, ne kaldı.",
+      urunler: "Ürün bazında kg ve kazanç."
+    };
+    return (
+      '<div class="header">' +
+        '<button class="hamburger" id="menuBtn"><span></span><span></span><span></span></button>' +
+        '<div class="header-center">' +
+          '<div class="eyebrow">Hal Fiş Hesabı</div>' +
+          "<h1>" + titles[state.view] + "</h1>" +
+          "<p>" + subs[state.view] + "</p>" +
+        "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderContent() {
+    if (state.view === "calc") return renderCalc();
+    if (state.view === "kasa") return renderKasa();
+    return renderUrunler();
+  }
+
+  /* ---------- HESAPLA ---------- */
+
+  function renderCalc() {
+    var rowsHtml = state.rows.map(function (r, idx) {
+      var c = calcRow(r);
+      var options = '<option value="">' + (state.urunler.length === 0 ? "Önce Ürünlerim'den ekle" : "Ürün seç...") + "</option>";
+      options += state.urunler.map(function (u) {
+        return '<option value="' + esc(u) + '" ' + (r.urun === u ? "selected" : "") + ">" + esc(u) + "</option>";
+      }).join("");
+      return (
+        '<div class="card">' +
+          '<div class="row-notch"></div>' +
+          '<div class="row-head">' +
+            '<span class="tag">KASA #' + (idx + 1) + "</span>" +
+            '<button class="icon-btn" data-remove-row="' + r.id + '">✕</button>' +
+          "</div>" +
+          '<div class="select-wrap">' +
+            '<select class="urun-select" data-row="' + r.id + '" data-field="urun">' + options + "</select>" +
+            '<span class="chevron">▾</span>' +
+          "</div>" +
+          '<div class="grid3">' +
+            '<div><div class="field-label">Kg</div><input class="field-input" inputmode="decimal" placeholder="0" value="' + esc(r.kg) + '" data-row="' + r.id + '" data-field="kg"></div>' +
+            '<div><div class="field-label">Fiyat ₺/kg</div><input class="field-input" inputmode="decimal" placeholder="0" value="' + esc(r.fiyat) + '" data-row="' + r.id + '" data-field="fiyat"></div>' +
+            '<div><div class="field-label">Komisyon %</div><input class="field-input" inputmode="decimal" placeholder="0" value="' + esc(r.oran) + '" data-row="' + r.id + '" data-field="oran"></div>' +
+          "</div>" +
+          '<div class="lines">' +
+            '<div class="line"><span class="lbl">Tutar</span><span class="val" id="tutar-' + r.id + '">' + tl(c.tutar) + " ₺</span></div>" +
+            '<div class="line"><span class="lbl muted" id="komisyonLbl-' + r.id + '">Komisyon (%' + (c.oran || 0) + ')</span><span class="val muted" id="komisyon-' + r.id + '">− ' + tl(c.komisyon) + " ₺</span></div>" +
+            '<div class="hr"></div>' +
+            '<div class="line"><span class="lbl">Net (üreticiye)</span><span class="val strong" id="net-' + r.id + '">' + tl(c.net) + " ₺</span></div>" +
+          "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    var totals = state.rows.reduce(function (acc, r) {
+      var c = calcRow(r);
+      acc.kg += c.kg; acc.komisyon += c.komisyon; acc.net += c.net;
+      return acc;
+    }, { kg: 0, komisyon: 0, net: 0 });
+
+    return (
+      '<div class="content with-bar">' +
+        (state.savedMsg ? '<div class="saved-msg">✓ Kasaya kaydedildi</div>' : "") +
+        rowsHtml +
+        '<button class="btn btn-outline" id="addRowBtn">+ Ürün Ekle</button>' +
+      "</div>" +
+      '<div class="sticky-bar">' +
+        '<div class="sbar-row"><span class="sbar-label">Toplam Kg</span><span class="sbar-val" id="sumKg">' + kgFmt(totals.kg) + " kg</span></div>" +
+        '<div class="sbar-row"><span class="sbar-label">Toplam Komisyon</span><span class="sbar-val warn" id="sumKomisyon">− ' + tl(totals.komisyon) + " ₺</span></div>" +
+        '<div class="sbar-total"><span class="lbl">NET TUTAR</span><span class="val" id="sumNet">' + tl(totals.net) + " ₺</span></div>" +
+        '<button class="btn btn-green" style="margin-top:12px" id="kaydetBtn">✓ BU FİŞİ KASAYA KAYDET</button>' +
+      "</div>"
+    );
+  }
+
+  function updateRowDisplay(rowId) {
+    var row = state.rows.find(function (r) { return r.id === rowId; });
+    if (!row) return;
+    var c = calcRow(row);
+    var tutarEl = document.getElementById("tutar-" + rowId);
+    var komisyonEl = document.getElementById("komisyon-" + rowId);
+    var komisyonLblEl = document.getElementById("komisyonLbl-" + rowId);
+    var netEl = document.getElementById("net-" + rowId);
+    if (tutarEl) tutarEl.textContent = tl(c.tutar) + " ₺";
+    if (komisyonEl) komisyonEl.textContent = "− " + tl(c.komisyon) + " ₺";
+    if (komisyonLblEl) komisyonLblEl.textContent = "Komisyon (%" + (c.oran || 0) + ")";
+    if (netEl) netEl.textContent = tl(c.net) + " ₺";
+    updateTotals();
+  }
+
+  function updateTotals() {
+    var totals = state.rows.reduce(function (acc, r) {
+      var c = calcRow(r);
+      acc.kg += c.kg; acc.komisyon += c.komisyon; acc.net += c.net;
+      return acc;
+    }, { kg: 0, komisyon: 0, net: 0 });
+    var kgEl = document.getElementById("sumKg");
+    var komEl = document.getElementById("sumKomisyon");
+    var netEl = document.getElementById("sumNet");
+    if (kgEl) kgEl.textContent = kgFmt(totals.kg) + " kg";
+    if (komEl) komEl.textContent = "− " + tl(totals.komisyon) + " ₺";
+    if (netEl) netEl.textContent = tl(totals.net) + " ₺";
+  }
+
+  /* ---------- KASA DEFTERI ---------- */
+
+  function renderKasa() {
+    var toplamSatis = state.ledger.filter(function (t) { return t.tip === "satis"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var toplamOdeme = state.ledger.filter(function (t) { return t.tip === "odeme"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var kalan = toplamSatis - toplamOdeme;
+
+    var formHtml = "";
+    if (state.odemeOpen) {
+      formHtml =
+        '<div class="card card-pad" style="display:flex;flex-direction:column;gap:12px;">' +
+          '<div>' +
+            '<div class="field-label" style="margin-bottom:4px;">Tutar (₺)</div>' +
+            '<input class="name-input" style="border-bottom:1px solid #D9CBA8;padding-bottom:6px;" inputmode="decimal" placeholder="0" value="' + esc(state.odemeTutar) + '" id="odemeTutarInput">' +
+          "</div>" +
+          '<div>' +
+            '<div class="field-label" style="margin-bottom:4px;">Açıklama (opsiyonel)</div>' +
+            '<input class="name-input" style="border-bottom:1px solid #D9CBA8;padding-bottom:6px;" placeholder="örn. Nakit avans" value="' + esc(state.odemeAciklama) + '" id="odemeAciklamaInput">' +
+          "</div>" +
+          '<button class="btn btn-green" id="odemeKaydetBtn">Kaydet</button>' +
+        "</div>";
+    }
+
+    var sirali = state.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    var txnHtml = sirali.length === 0
+      ? '<div class="empty-note">Henüz kayıt yok. Fiş hesaplayıp kasaya kaydet veya para aldığında buraya ekle.</div>'
+      : sirali.map(function (t) {
+          var desc = t.tip === "satis" ? t.grup : t.aciklama;
+          var meta = t.tarih + " · " + (t.tip === "satis" ? ("Satış" + (t.kg ? " · " + kgFmt(t.kg) + " kg" : "")) : "Ödeme alındı");
+          var amtClass = t.tip === "satis" ? "plus" : "minus";
+          var sign = t.tip === "satis" ? "+" : "−";
+          return (
+            '<div class="txn">' +
+              '<div style="min-width:0;">' +
+                '<div class="txn-desc">' + esc(desc) + "</div>" +
+                '<div class="txn-meta">' + esc(meta) + "</div>" +
+              "</div>" +
+              '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px;">' +
+                '<span class="txn-amt ' + amtClass + '">' + sign + tl(t.tutar) + " ₺</span>" +
+                '<button class="txn-del" data-del-txn="' + t.id + '">✕</button>' +
+              "</div>" +
+            "</div>"
+          );
+        }).join('<div style="height:8px"></div>');
+
+    return (
+      '<div class="content">' +
+        '<div class="card card-pad">' +
+          '<div class="line" style="margin-bottom:8px;"><span class="lbl">Toplam Kazandığım (Satış)</span><span class="val strong">' + tl(toplamSatis) + " ₺</span></div>" +
+          '<div class="line" style="margin-bottom:8px;"><span class="lbl">Halden Aldığım Para</span><span class="val muted">− ' + tl(toplamOdeme) + " ₺</span></div>" +
+          '<div class="hr" style="margin:8px 0;"></div>' +
+          '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
+          (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Aldığın para kazandığından fazla — hale borçlusun.</div>' : "") +
+        "</div>" +
+        '<button class="btn btn-red" id="odemeToggleBtn">+ HALDEN PARA ALDIM</button>' +
+        formHtml +
+        '<div>' +
+          '<div class="section-label">Hareketler</div>' +
+          txnHtml +
+        "</div>" +
+      "</div>"
+    );
+  }
+
+  /* ---------- URUNLERIM ---------- */
+
+  function renderUrunler() {
+    var map = {};
+    state.ledger.filter(function (t) { return t.tip === "satis"; }).forEach(function (t) {
+      var key = t.grup || "Diğer";
+      if (!map[key]) map[key] = { kg: 0, tutar: 0 };
+      map[key].kg += t.kg || 0;
+      map[key].tutar += t.tutar || 0;
+    });
+    var tumAdlarSet = {};
+    state.urunler.forEach(function (u) { tumAdlarSet[u] = true; });
+    Object.keys(map).forEach(function (k) { tumAdlarSet[k] = true; });
+    var liste = Object.keys(tumAdlarSet).map(function (ad) {
+      var m = map[ad] || { kg: 0, tutar: 0 };
+      return { ad: ad, kg: m.kg, tutar: m.tutar, tanimli: state.urunler.indexOf(ad) !== -1 };
+    }).sort(function (a, b) { return b.tutar - a.tutar; });
+
+    var cardsHtml = liste.length === 0
+      ? '<div class="empty-note">Henüz ürün yok. Yukarıdan ekle, Fiş Hesapla ekranında listeden seçebilirsin.</div>'
+      : liste.map(function (g) {
+          return (
+            '<div class="card card-pad">' +
+              '<div class="prod-card-head">' +
+                '<div class="prod-name">' + esc(g.ad) + "</div>" +
+                (g.tanimli ? '<button class="txn-del" data-del-urun="' + esc(g.ad) + '">✕</button>' : "") +
+              "</div>" +
+              '<div class="line"><span class="lbl">Toplam Kg</span><span class="val">' + kgFmt(g.kg) + " kg</span></div>" +
+              '<div class="line" style="margin-top:4px;"><span class="lbl">Toplam Kazanç</span><span class="val strong">' + tl(g.tutar) + " ₺</span></div>" +
+            "</div>"
+          );
+        }).join("");
+
+    return (
+      '<div class="content">' +
+        '<div class="card card-pad">' +
+          '<div class="add-row">' +
+            '<input placeholder="Yeni ürün adı (örn. Biber Çarlı)" value="' + esc(state.yeniUrunAd) + '" id="yeniUrunInput">' +
+            '<button class="btn-small" id="urunEkleBtn">Ekle</button>' +
+          "</div>" +
+        "</div>" +
+        cardsHtml +
+      "</div>"
+    );
+  }
+
+  /* ---------- ACTIONS ---------- */
+
+  function addRow() { state.rows.push(newRow()); render(); }
+  function removeRow(id) {
+    if (state.rows.length <= 1) return;
+    state.rows = state.rows.filter(function (r) { return r.id !== id; });
+    render();
+  }
+  function kaydetFis() {
+    var entries = state.rows
+      .map(function (r) {
+        var c = calcRow(r);
+        return { grup: (r.urun || "").trim() || "Diğer", kg: c.kg, net: c.net };
+      })
+      .filter(function (x) { return x.net > 0; })
+      .map(function (x) {
+        return { id: uid(), tip: "satis", tarih: bugun(), grup: x.grup, kg: x.kg, tutar: x.net };
+      });
+    if (entries.length === 0) return;
+    state.ledger = entries.concat(state.ledger);
+    persistLedger();
+    state.rows = [newRow()];
+    state.savedMsg = true;
+    render();
+    setTimeout(function () {
+      state.savedMsg = false;
+      render();
+    }, 2000);
+  }
+
+  function odemeKaydet() {
+    var t = parseNum(state.odemeTutar);
+    if (t <= 0) return;
+    state.ledger = [{
+      id: uid(), tip: "odeme", tarih: bugun(),
+      aciklama: state.odemeAciklama.trim() || "Halden alınan ödeme",
+      tutar: t
+    }].concat(state.ledger);
+    persistLedger();
+    state.odemeTutar = ""; state.odemeAciklama = ""; state.odemeOpen = false;
+    render();
+  }
+  function silTxn(id) {
+    state.ledger = state.ledger.filter(function (t) { return t.id !== id; });
+    persistLedger();
+    render();
+  }
+
+  function urunEkle() {
+    var ad = state.yeniUrunAd.trim();
+    if (!ad) return;
+    var exists = state.urunler.some(function (u) { return u.toLowerCase() === ad.toLowerCase(); });
+    if (!exists) { state.urunler.push(ad); persistUrunler(); }
+    state.yeniUrunAd = "";
+    render();
+  }
+  function urunSil(ad) {
+    state.urunler = state.urunler.filter(function (u) { return u !== ad; });
+    persistUrunler();
+    render();
+  }
+
+  /* ---------- EVENTS ---------- */
+
+  function bindEvents() {
+    var menuBtn = document.getElementById("menuBtn");
+    if (menuBtn) menuBtn.addEventListener("click", function () { state.drawerOpen = true; render(); });
+
+    var overlay = document.getElementById("overlay");
+    if (overlay) overlay.addEventListener("click", function () { state.drawerOpen = false; render(); });
+
+    var drawerItems = document.querySelectorAll(".drawer-item");
+    drawerItems.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.view = btn.getAttribute("data-view");
+        state.drawerOpen = false;
+        render();
+      });
+    });
+
+    if (state.view === "calc") {
+      document.querySelectorAll("select.urun-select").forEach(function (sel) {
+        sel.addEventListener("change", function () {
+          var rowId = sel.getAttribute("data-row");
+          var row = state.rows.find(function (r) { return r.id === rowId; });
+          if (row) row.urun = sel.value;
+          render();
+        });
+      });
+      document.querySelectorAll(".field-input").forEach(function (inp) {
+        inp.addEventListener("input", function () {
+          var rowId = inp.getAttribute("data-row");
+          var field = inp.getAttribute("data-field");
+          var formatted = formatInput(inp.value);
+          inp.value = formatted;
+          var row = state.rows.find(function (r) { return r.id === rowId; });
+          if (row) { row[field] = formatted; updateRowDisplay(rowId); }
+        });
+      });
+      document.querySelectorAll("[data-remove-row]").forEach(function (btn) {
+        btn.addEventListener("click", function () { removeRow(btn.getAttribute("data-remove-row")); });
+      });
+      var addRowBtn = document.getElementById("addRowBtn");
+      if (addRowBtn) addRowBtn.addEventListener("click", addRow);
+      var kaydetBtn = document.getElementById("kaydetBtn");
+      if (kaydetBtn) kaydetBtn.addEventListener("click", kaydetFis);
+    }
+
+    if (state.view === "kasa") {
+      var odemeToggleBtn = document.getElementById("odemeToggleBtn");
+      if (odemeToggleBtn) odemeToggleBtn.addEventListener("click", function () { state.odemeOpen = !state.odemeOpen; render(); });
+      var odemeTutarInput = document.getElementById("odemeTutarInput");
+      if (odemeTutarInput) odemeTutarInput.addEventListener("input", function () {
+        var formatted = formatInput(odemeTutarInput.value);
+        odemeTutarInput.value = formatted;
+        state.odemeTutar = formatted;
+      });
+      var odemeAciklamaInput = document.getElementById("odemeAciklamaInput");
+      if (odemeAciklamaInput) odemeAciklamaInput.addEventListener("input", function () {
+        state.odemeAciklama = odemeAciklamaInput.value;
+      });
+      var odemeKaydetBtn = document.getElementById("odemeKaydetBtn");
+      if (odemeKaydetBtn) odemeKaydetBtn.addEventListener("click", odemeKaydet);
+      document.querySelectorAll("[data-del-txn]").forEach(function (btn) {
+        btn.addEventListener("click", function () { silTxn(btn.getAttribute("data-del-txn")); });
+      });
+    }
+
+    if (state.view === "urunler") {
+      var yeniUrunInput = document.getElementById("yeniUrunInput");
+      if (yeniUrunInput) yeniUrunInput.addEventListener("input", function () { state.yeniUrunAd = yeniUrunInput.value; });
+      if (yeniUrunInput) yeniUrunInput.addEventListener("keydown", function (e) { if (e.key === "Enter") urunEkle(); });
+      var urunEkleBtn = document.getElementById("urunEkleBtn");
+      if (urunEkleBtn) urunEkleBtn.addEventListener("click", urunEkle);
+      document.querySelectorAll("[data-del-urun]").forEach(function (btn) {
+        btn.addEventListener("click", function () { urunSil(btn.getAttribute("data-del-urun")); });
+      });
+    }
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
