@@ -72,6 +72,10 @@
   .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; border-bottom:1px solid #D9CBA8; }
   .grid3 > div { padding:10px 12px; border-left:1px solid #D9CBA8; }
   .grid3 > div:first-child { border-left:none; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid #D9CBA8; }
+  .grid2 > div { padding:10px 12px; border-left:1px solid #D9CBA8; }
+  .grid2 > div:first-child { border-left:none; }
+  select.kalite-select { width:100%; appearance:none; -webkit-appearance:none; background:transparent; border:none; outline:none; font-size:15px; font-weight:600; color:#2B2118; }
   .field-label { font-size:10px; text-transform:uppercase; letter-spacing:0.03em; color:#A89878; margin-bottom:2px; }
   .field-input { width:100%; background:transparent; border:none; outline:none; font-size:16px; font-weight:600; color:#2B2118; }
   .field-input::placeholder { color:#A89878; }
@@ -120,10 +124,25 @@
   .txn-del { background:none; border:none; color:#C9BB98; font-size:14px; padding:0 4px; }
 
   .section-label { color:#B8A98A; font-size:11px; text-transform:uppercase; letter-spacing:0.03em; margin:4px 4px; }
+
+  /* Yazdırılabilir makbuz */
+  .receipt-print { display:none; }
+  @media print {
+    body > *:not(.receipt-print) { display:none !important; }
+    .receipt-print { display:block !important; padding:28px; color:#111; background:#fff; font-family:-apple-system,sans-serif; }
+    .receipt-print h2 { margin:0 0 2px; font-size:20px; }
+    .receipt-print .rp-sub { color:#555; font-size:13px; margin-bottom:18px; }
+    .receipt-print table { width:100%; border-collapse:collapse; font-size:14px; }
+    .receipt-print td { padding:6px 0; border-bottom:1px solid #ddd; }
+    .receipt-print td.rp-label { color:#555; }
+    .receipt-print td.rp-val { text-align:right; font-weight:600; }
+    .receipt-print .rp-total td { font-size:17px; font-weight:800; border-top:2px solid #111; border-bottom:none; padding-top:10px; }
+  }
 </style>
 </head>
 <body>
 <div id="root"></div>
+<div id="receiptPrint" class="receipt-print"></div>
 
 <script>
 (function () {
@@ -254,7 +273,7 @@
     renderGate();
   }
 
-  function newRow() { return { id: uid(), urun: "", kg: "", fiyat: "", oran: "13", tarih: todayISO() }; }
+  function newRow() { return { id: uid(), urun: "", kg: "", fiyat: "", oran: "13", tarih: todayISO(), kalite: "Standart", kasaAdet: "" }; }
 
   var state = {
     view: "calc",
@@ -269,6 +288,7 @@
     odemeTutar: "",
     odemeAciklama: "",
     bakiyeOpen: false,
+    grafikOpen: false,
     bakiyeTutar: "",
     bakiyeAciklama: "",
     yeniUrunAd: "",
@@ -371,6 +391,14 @@
             '<div><div class="field-label">Kg</div><input class="field-input" inputmode="decimal" placeholder="0" value="' + esc(r.kg) + '" data-row="' + r.id + '" data-field="kg"></div>' +
             '<div><div class="field-label">Fiyat ₺/kg</div><input class="field-input" inputmode="decimal" placeholder="0" value="' + esc(r.fiyat) + '" data-row="' + r.id + '" data-field="fiyat"></div>' +
             '<div><div class="field-label">Komisyon %</div><input class="field-input" inputmode="decimal" placeholder="0" value="' + esc(r.oran) + '" data-row="' + r.id + '" data-field="oran"></div>' +
+          "</div>" +
+          '<div class="grid2">' +
+            '<div><div class="field-label">Kalite</div><select class="kalite-select" data-row="' + r.id + '" data-field="kalite">' +
+              ["Standart","1. Kalite","2. Kalite","3. Kalite"].map(function (k) {
+                return '<option value="' + k + '" ' + (r.kalite === k ? "selected" : "") + ">" + k + "</option>";
+              }).join("") +
+            "</select></div>" +
+            '<div><div class="field-label">Kasa Adedi (ops.)</div><input class="field-input" inputmode="numeric" placeholder="0" value="' + esc(r.kasaAdet) + '" data-row="' + r.id + '" data-field="kasaAdet"></div>' +
           "</div>" +
           '<div class="lines">' +
             '<div class="line"><span class="lbl">Tutar</span><span class="val" id="tutar-' + r.id + '">' + tl(c.tutar) + " ₺</span></div>" +
@@ -479,7 +507,7 @@
           var desc = t.tip === "satis" ? t.grup : t.aciklama;
           var meta;
           if (t.tip === "satis") {
-            meta = t.tarih + " · Satış" + (t.kg ? " · " + kgFmt(t.kg) + " kg" : "") + (t.fiyat ? " · " + tl(t.fiyat) + " ₺/kg" : "");
+            meta = t.tarih + " · Satış" + (t.kg ? " · " + kgFmt(t.kg) + " kg" : "") + (t.fiyat ? " · " + tl(t.fiyat) + " ₺/kg" : "") + (t.kalite && t.kalite !== "Standart" ? " · " + t.kalite : "") + (t.kasaAdet ? " · " + kgFmt(t.kasaAdet) + " kasa" : "");
           } else if (t.tip === "bakiye") {
             meta = t.tarih + " · Devreden bakiye";
           } else {
@@ -497,6 +525,7 @@
               "</div>" +
               '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px;">' +
                 '<span class="txn-amt ' + amtClass + '">' + sign + tl(Math.abs(t.tutar)) + " ₺</span>" +
+                '<button class="txn-del" data-print-txn="' + t.id + '" style="font-size:14px;">🖨️</button>' +
                 '<button class="txn-del" data-del-txn="' + t.id + '">✕</button>' +
               "</div>" +
             "</div>"
@@ -513,6 +542,8 @@
           '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
           (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Aldığın para kazandığından fazla — hale borçlusun.</div>' : "") +
         "</div>" +
+        '<button class="btn-small" id="grafikToggleBtn" style="width:100%;background:#4A7A3F;">📊 ' + (state.grafikOpen ? "Grafiği Gizle" : "Aylık Grafiği Göster") + "</button>" +
+        (state.grafikOpen ? '<div class="card card-pad"><canvas id="kasaChart" width="300" height="160" style="width:100%;height:160px;display:block;"></canvas></div>' : "") +
         '<button class="btn btn-red" id="odemeToggleBtn">+ HALDEN PARA ALDIM</button>' +
         formHtml +
         '<button class="btn btn-green" id="bakiyeToggleBtn">+ ESKİ / DEVREDEN BAKİYE EKLE</button>' +
@@ -521,6 +552,7 @@
           '<div class="section-label">Hareketler</div>' +
           txnHtml +
         "</div>" +
+        '<button class="btn-small" id="disaAktarBtn" style="width:100%;margin-top:6px;background:#5C4A34;">⬇ CSV OLARAK İNDİR</button>' +
         '<button class="btn btn-outline" id="yeniSezonBtn" style="margin-top:6px;">↻ YENİ SEZONA GEÇ</button>' +
       "</div>"
     );
@@ -632,11 +664,11 @@
     var entries = state.rows
       .map(function (r) {
         var c = calcRow(r);
-        return { grup: (r.urun || "").trim() || "Diğer", kg: c.kg, net: c.net, fiyat: c.fiyat, tarih: isoToTr(r.tarih) };
+        return { grup: (r.urun || "").trim() || "Diğer", kg: c.kg, net: c.net, fiyat: c.fiyat, tarih: isoToTr(r.tarih), kalite: r.kalite || "Standart", kasaAdet: parseNum(r.kasaAdet), oran: c.oran, komisyon: c.komisyon, tutarBrut: c.tutar };
       })
       .filter(function (x) { return x.net > 0; })
       .map(function (x) {
-        return { id: uid(), tip: "satis", tarih: x.tarih, grup: x.grup, kg: x.kg, fiyat: x.fiyat, tutar: x.net };
+        return { id: uid(), tip: "satis", tarih: x.tarih, grup: x.grup, kg: x.kg, fiyat: x.fiyat, tutar: x.net, kalite: x.kalite, kasaAdet: x.kasaAdet, oran: x.oran, komisyon: x.komisyon, tutarBrut: x.tutarBrut };
       });
     if (entries.length === 0) return;
     state.ledger = entries.concat(state.ledger);
@@ -678,6 +710,127 @@
     state.ledger = state.ledger.filter(function (t) { return t.id !== id; });
     persistLedger();
     render();
+  }
+
+  function ayAnahtari(trTarih) {
+    var parts = String(trTarih || "").split(".");
+    if (parts.length !== 3) return trTarih;
+    return parts[1] + "." + parts[2];
+  }
+  function ayEtiketi(key) {
+    var parts = key.split(".");
+    var aylar = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+    var idx = parseInt(parts[0], 10) - 1;
+    return (aylar[idx] || parts[0]) + " " + String(parts[1]).slice(2);
+  }
+  function drawKasaChart() {
+    var canvas = document.getElementById("kasaChart");
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    var map = {};
+    state.ledger.filter(function (t) { return t.tip === "satis"; }).forEach(function (t) {
+      var k = ayAnahtari(t.tarih);
+      map[k] = (map[k] || 0) + t.tutar;
+    });
+    var keys = Object.keys(map).sort(function (a, b) {
+      var pa = a.split("."), pb = b.split(".");
+      return new Date(parseInt(pa[1], 10), parseInt(pa[0], 10) - 1, 1) - new Date(parseInt(pb[1], 10), parseInt(pb[0], 10) - 1, 1);
+    });
+    keys = keys.slice(-6);
+
+    if (keys.length === 0) {
+      ctx.fillStyle = "#A89878";
+      ctx.font = "13px -apple-system";
+      ctx.fillText("Henüz veri yok", 10, h / 2);
+      return;
+    }
+
+    var maxVal = Math.max.apply(null, keys.map(function (k) { return map[k]; }));
+    var padding = 20;
+    var barAreaW = w - padding * 2;
+    var barAreaH = h - 34;
+    var gap = 12;
+    var barW = (barAreaW - gap * (keys.length - 1)) / keys.length;
+
+    keys.forEach(function (k, i) {
+      var val = map[k];
+      var barH = maxVal > 0 ? (val / maxVal) * (barAreaH - 10) : 0;
+      var x = padding + i * (barW + gap);
+      var y = barAreaH - barH + 6;
+      ctx.fillStyle = "#C1442E";
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(x, y, barW, barH, 4); ctx.fill(); }
+      else { ctx.fillRect(x, y, barW, barH); }
+      ctx.fillStyle = "#5C4A34";
+      ctx.font = "10px -apple-system";
+      ctx.textAlign = "center";
+      ctx.fillText(ayEtiketi(k), x + barW / 2, barAreaH + 18);
+    });
+  }
+
+  function csvKacir(v) {
+    return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+  }
+  function disaAktarCSV() {
+    if (state.ledger.length === 0) { alert("Aktarılacak kayıt yok."); return; }
+    var header = ["Tarih", "Tür", "Açıklama/Ürün", "Kalite", "Kg", "Kasa Adedi", "Fiyat (₺/kg)", "Komisyon %", "Tutar (₺)"];
+    var sirali = state.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    var lines = [header.map(csvKacir).join(",")];
+    sirali.forEach(function (t) {
+      var tur = t.tip === "satis" ? "Satış" : (t.tip === "bakiye" ? "Devreden Bakiye" : "Ödeme Alındı");
+      var aciklama = t.tip === "satis" ? t.grup : t.aciklama;
+      lines.push([
+        t.tarih, tur, aciklama,
+        t.tip === "satis" ? (t.kalite || "") : "",
+        t.tip === "satis" && t.kg ? kgFmt(t.kg) : "",
+        t.tip === "satis" && t.kasaAdet ? t.kasaAdet : "",
+        t.tip === "satis" && t.fiyat ? tl(t.fiyat) : "",
+        t.tip === "satis" && t.oran ? t.oran : "",
+        tl(t.tutar)
+      ].map(csvKacir).join(","));
+    });
+    var csv = "\uFEFF" + lines.join("\r\n");
+    var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "hal-kasa-defteri-" + todayISO() + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  }
+
+  function printReceipt(id) {
+    var t = state.ledger.find(function (x) { return x.id === id; });
+    if (!t) return;
+    var rows = [];
+    if (t.tip === "satis") {
+      rows.push(["Ürün", esc(t.grup)]);
+      if (t.kalite && t.kalite !== "Standart") rows.push(["Kalite", esc(t.kalite)]);
+      if (t.kg) rows.push(["Miktar", kgFmt(t.kg) + " kg"]);
+      if (t.kasaAdet) rows.push(["Kasa Adedi", kgFmt(t.kasaAdet)]);
+      if (t.fiyat) rows.push(["Birim Fiyat", tl(t.fiyat) + " ₺/kg"]);
+      if (t.tutarBrut) rows.push(["Brüt Tutar", tl(t.tutarBrut) + " ₺"]);
+      if (t.oran) rows.push(["Komisyon (%" + t.oran + ")", "− " + tl(t.komisyon || 0) + " ₺"]);
+    } else {
+      rows.push(["Açıklama", esc(t.aciklama)]);
+    }
+    var baslik = t.tip === "satis" ? "Müstahsil Makbuzu" : (t.tip === "bakiye" ? "Devreden Bakiye Fişi" : "Ödeme Fişi");
+    var html =
+      "<h2>Hal Fiş Hesabı</h2>" +
+      '<div class="rp-sub">' + baslik + " · " + esc(t.tarih) + "</div>" +
+      "<table>" +
+      rows.map(function (r) {
+        return "<tr><td class=\"rp-label\">" + r[0] + "</td><td class=\"rp-val\">" + r[1] + "</td></tr>";
+      }).join("") +
+      '<tr class="rp-total"><td>' + (t.tip === "satis" ? "Net (üreticiye)" : "Tutar") + "</td><td>" + tl(t.tutar) + " ₺</td></tr>" +
+      "</table>";
+    document.getElementById("receiptPrint").innerHTML = html;
+    window.print();
   }
 
   function urunEkle() {
@@ -751,6 +904,13 @@
           render();
         });
       });
+      document.querySelectorAll("select.kalite-select").forEach(function (sel) {
+        sel.addEventListener("change", function () {
+          var rowId = sel.getAttribute("data-row");
+          var row = state.rows.find(function (r) { return r.id === rowId; });
+          if (row) row.kalite = sel.value;
+        });
+      });
       document.querySelectorAll(".date-input").forEach(function (inp) {
         inp.addEventListener("change", function () {
           var rowId = inp.getAttribute("data-row");
@@ -809,8 +969,16 @@
       document.querySelectorAll("[data-del-txn]").forEach(function (btn) {
         btn.addEventListener("click", function () { silTxn(btn.getAttribute("data-del-txn")); });
       });
+      document.querySelectorAll("[data-print-txn]").forEach(function (btn) {
+        btn.addEventListener("click", function () { printReceipt(btn.getAttribute("data-print-txn")); });
+      });
       var yeniSezonBtn = document.getElementById("yeniSezonBtn");
       if (yeniSezonBtn) yeniSezonBtn.addEventListener("click", yeniSezonaGec);
+      var disaAktarBtn = document.getElementById("disaAktarBtn");
+      if (disaAktarBtn) disaAktarBtn.addEventListener("click", disaAktarCSV);
+      var grafikToggleBtn = document.getElementById("grafikToggleBtn");
+      if (grafikToggleBtn) grafikToggleBtn.addEventListener("click", function () { state.grafikOpen = !state.grafikOpen; render(); });
+      if (state.grafikOpen) drawKasaChart();
     }
 
     if (state.view === "urunler") {
