@@ -131,6 +131,7 @@
 
   var LS_LEDGER = "hal_defteri_v1";
   var LS_URUNLER = "hal_urunler_v1";
+  var LS_SEZONLAR = "hal_sezonlar_v1";
 
   function loadJSON(key, fallback) {
     try {
@@ -261,15 +262,21 @@
     rows: [newRow()],
     ledger: loadJSON(LS_LEDGER, []),
     urunler: loadJSON(LS_URUNLER, []),
+    sezonlar: loadJSON(LS_SEZONLAR, []),
+    sezonAcikId: null,
     savedMsg: false,
     odemeOpen: false,
     odemeTutar: "",
     odemeAciklama: "",
+    bakiyeOpen: false,
+    bakiyeTutar: "",
+    bakiyeAciklama: "",
     yeniUrunAd: "",
   };
 
   function persistLedger() { saveJSON(LS_LEDGER, state.ledger); }
   function persistUrunler() { saveJSON(LS_URUNLER, state.urunler); }
+  function persistSezonlar() { saveJSON(LS_SEZONLAR, state.sezonlar); }
 
   function calcRow(r) {
     var kg = parseNum(r.kg);
@@ -293,7 +300,8 @@
     var items = [
       { v: "calc", label: "🧮 Fiş Hesapla" },
       { v: "kasa", label: "💰 Kasa Defterim" },
-      { v: "urunler", label: "📦 Ürünlerim" }
+      { v: "urunler", label: "📦 Ürünlerim" },
+      { v: "gecmis", label: "📜 Geçmiş Sezonlar" }
     ];
     var itemsHtml = items.map(function (it) {
       return '<button class="drawer-item ' + (state.view === it.v ? "active" : "") + '" data-view="' + it.v + '">' + it.label + "</button>";
@@ -308,11 +316,12 @@
   }
 
   function renderHeader() {
-    var titles = { calc: "Komisyon Hesaplayıcı", kasa: "Kasa Defterim", urunler: "Ürünlerim" };
+    var titles = { calc: "Komisyon Hesaplayıcı", kasa: "Kasa Defterim", urunler: "Ürünlerim", gecmis: "Geçmiş Sezonlar" };
     var subs = {
       calc: "Kg, fiyat ve komisyon oranını gir.",
       kasa: "Ne kazandın, ne aldın, ne kaldı.",
-      urunler: "Ürün bazında kg ve kazanç."
+      urunler: "Ürün bazında kg ve kazanç.",
+      gecmis: "Önceki sezonların özeti."
     };
     return (
       '<div class="header">' +
@@ -329,7 +338,8 @@
   function renderContent() {
     if (state.view === "calc") return renderCalc();
     if (state.view === "kasa") return renderKasa();
-    return renderUrunler();
+    if (state.view === "urunler") return renderUrunler();
+    return renderGecmisSezonlar();
   }
 
   /* ---------- HESAPLA ---------- */
@@ -426,8 +436,9 @@
 
   function renderKasa() {
     var toplamSatis = state.ledger.filter(function (t) { return t.tip === "satis"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var toplamBakiye = state.ledger.filter(function (t) { return t.tip === "bakiye"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var toplamOdeme = state.ledger.filter(function (t) { return t.tip === "odeme"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
-    var kalan = toplamSatis - toplamOdeme;
+    var kalan = toplamSatis + toplamBakiye - toplamOdeme;
 
     var formHtml = "";
     if (state.odemeOpen) {
@@ -445,14 +456,39 @@
         "</div>";
     }
 
+    var bakiyeFormHtml = "";
+    if (state.bakiyeOpen) {
+      bakiyeFormHtml =
+        '<div class="card card-pad" style="display:flex;flex-direction:column;gap:12px;">' +
+          '<div>' +
+            '<div class="field-label" style="margin-bottom:4px;">Tutar (₺)</div>' +
+            '<input class="name-input" style="border-bottom:1px solid #D9CBA8;padding-bottom:6px;" inputmode="decimal" placeholder="0" value="' + esc(state.bakiyeTutar) + '" id="bakiyeTutarInput">' +
+          "</div>" +
+          '<div>' +
+            '<div class="field-label" style="margin-bottom:4px;">Açıklama (opsiyonel)</div>' +
+            '<input class="name-input" style="border-bottom:1px solid #D9CBA8;padding-bottom:6px;" placeholder="örn. Geçen seneden kalan" value="' + esc(state.bakiyeAciklama) + '" id="bakiyeAciklamaInput">' +
+          "</div>" +
+          '<button class="btn btn-green" id="bakiyeKaydetBtn">Kaydet</button>' +
+        "</div>";
+    }
+
     var sirali = state.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
     var txnHtml = sirali.length === 0
       ? '<div class="empty-note">Henüz kayıt yok. Fiş hesaplayıp kasaya kaydet veya para aldığında buraya ekle.</div>'
       : sirali.map(function (t) {
           var desc = t.tip === "satis" ? t.grup : t.aciklama;
-          var meta = t.tarih + " · " + (t.tip === "satis" ? ("Satış" + (t.kg ? " · " + kgFmt(t.kg) + " kg" : "")) : "Ödeme alındı");
-          var amtClass = t.tip === "satis" ? "plus" : "minus";
-          var sign = t.tip === "satis" ? "+" : "−";
+          var meta;
+          if (t.tip === "satis") {
+            meta = t.tarih + " · Satış" + (t.kg ? " · " + kgFmt(t.kg) + " kg" : "") + (t.fiyat ? " · " + tl(t.fiyat) + " ₺/kg" : "");
+          } else if (t.tip === "bakiye") {
+            meta = t.tarih + " · Devreden bakiye";
+          } else {
+            meta = t.tarih + " · Ödeme alındı";
+          }
+          var amtClass, sign;
+          if (t.tip === "odeme") { amtClass = "minus"; sign = "−"; }
+          else if (t.tip === "bakiye") { amtClass = t.tutar < 0 ? "minus" : "plus"; sign = t.tutar < 0 ? "−" : "+"; }
+          else { amtClass = "plus"; sign = "+"; }
           return (
             '<div class="txn">' +
               '<div style="min-width:0;">' +
@@ -460,7 +496,7 @@
                 '<div class="txn-meta">' + esc(meta) + "</div>" +
               "</div>" +
               '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px;">' +
-                '<span class="txn-amt ' + amtClass + '">' + sign + tl(t.tutar) + " ₺</span>" +
+                '<span class="txn-amt ' + amtClass + '">' + sign + tl(Math.abs(t.tutar)) + " ₺</span>" +
                 '<button class="txn-del" data-del-txn="' + t.id + '">✕</button>' +
               "</div>" +
             "</div>"
@@ -471,6 +507,7 @@
       '<div class="content">' +
         '<div class="card card-pad">' +
           '<div class="line" style="margin-bottom:8px;"><span class="lbl">Toplam Kazandığım (Satış)</span><span class="val strong">' + tl(toplamSatis) + " ₺</span></div>" +
+          (toplamBakiye !== 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">Devreden Bakiye</span><span class="val ' + (toplamBakiye < 0 ? "muted" : "strong") + '">' + (toplamBakiye < 0 ? "− " : "") + tl(Math.abs(toplamBakiye)) + " ₺</span></div>" : "") +
           '<div class="line" style="margin-bottom:8px;"><span class="lbl">Halden Aldığım Para</span><span class="val muted">− ' + tl(toplamOdeme) + " ₺</span></div>" +
           '<div class="hr" style="margin:8px 0;"></div>' +
           '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
@@ -478,10 +515,13 @@
         "</div>" +
         '<button class="btn btn-red" id="odemeToggleBtn">+ HALDEN PARA ALDIM</button>' +
         formHtml +
+        '<button class="btn btn-green" id="bakiyeToggleBtn">+ ESKİ / DEVREDEN BAKİYE EKLE</button>' +
+        bakiyeFormHtml +
         '<div>' +
           '<div class="section-label">Hareketler</div>' +
           txnHtml +
         "</div>" +
+        '<button class="btn btn-outline" id="yeniSezonBtn" style="margin-top:6px;">↻ YENİ SEZONA GEÇ</button>' +
       "</div>"
     );
   }
@@ -532,6 +572,54 @@
     );
   }
 
+  /* ---------- GECMIS SEZONLAR ---------- */
+
+  function sezonTotals(ledger) {
+    var satis = ledger.filter(function (t) { return t.tip === "satis"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var bakiye = ledger.filter(function (t) { return t.tip === "bakiye"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    var odeme = ledger.filter(function (t) { return t.tip === "odeme"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
+    return { satis: satis, bakiye: bakiye, odeme: odeme, kalan: satis + bakiye - odeme };
+  }
+
+  function renderGecmisSezonlar() {
+    if (state.sezonlar.length === 0) {
+      return '<div class="content"><div class="empty-note">Henüz geçmiş sezon yok. Kasa Defterim ekranındaki "Yeni Sezona Geç" butonuyla mevcut sezonu buraya arşivleyebilirsin.</div></div>';
+    }
+    var cards = state.sezonlar.map(function (s) {
+      var t = sezonTotals(s.ledger);
+      var acik = state.sezonAcikId === s.id;
+      var detayHtml = "";
+      if (acik) {
+        var sirali = s.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+        detayHtml = '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">' +
+          (sirali.length === 0 ? '<div class="empty-note">Kayıt yok.</div>' : sirali.map(function (tx) {
+            var desc = tx.tip === "satis" ? tx.grup : tx.aciklama;
+            var amtClass = tx.tip === "odeme" ? "minus" : "plus";
+            var sign = tx.tip === "odeme" ? "−" : "+";
+            return '<div class="txn" style="padding:8px 12px;"><div class="txn-desc" style="font-size:13px;">' + esc(desc) + " · " + esc(tx.tarih) + '</div><span class="txn-amt ' + amtClass + '" style="font-size:13px;">' + sign + tl(tx.tutar) + " ₺</span></div>";
+          }).join("")) +
+        "</div>";
+      }
+      return (
+        '<div class="card card-pad">' +
+          '<div class="prod-card-head">' +
+            '<div class="prod-name">' + esc(s.ad) + "</div>" +
+            '<button class="txn-del" data-del-sezon="' + s.id + '">✕</button>' +
+          "</div>" +
+          '<div style="font-size:12px;color:#A89878;margin-bottom:8px;">Arşiv tarihi: ' + esc(s.tarih) + "</div>" +
+          '<div class="line"><span class="lbl">Satış</span><span class="val">' + tl(t.satis) + " ₺</span></div>" +
+          (t.bakiye !== 0 ? '<div class="line" style="margin-top:4px;"><span class="lbl">Devreden Bakiye</span><span class="val">' + (t.bakiye < 0 ? "− " : "") + tl(Math.abs(t.bakiye)) + " ₺</span></div>" : "") +
+          '<div class="line" style="margin-top:4px;"><span class="lbl">Alınan Ödeme</span><span class="val muted">− ' + tl(t.odeme) + " ₺</span></div>" +
+          '<div class="hr" style="margin:8px 0;"></div>' +
+          '<div class="line"><span class="lbl" style="font-weight:700;">Kalan</span><span style="font-weight:700;color:' + (t.kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (t.kalan < 0 ? "− " : "") + tl(Math.abs(t.kalan)) + " ₺</span></div>" +
+          '<button class="btn-small" style="margin-top:10px;width:100%;" data-toggle-sezon="' + s.id + '">' + (acik ? "Detayı Gizle" : "Detayı Göster") + "</button>" +
+          detayHtml +
+        "</div>"
+      );
+    }).join("");
+    return '<div class="content">' + cards + "</div>";
+  }
+
   /* ---------- ACTIONS ---------- */
 
   function addRow() { state.rows.push(newRow()); render(); }
@@ -544,11 +632,11 @@
     var entries = state.rows
       .map(function (r) {
         var c = calcRow(r);
-        return { grup: (r.urun || "").trim() || "Diğer", kg: c.kg, net: c.net, tarih: isoToTr(r.tarih) };
+        return { grup: (r.urun || "").trim() || "Diğer", kg: c.kg, net: c.net, fiyat: c.fiyat, tarih: isoToTr(r.tarih) };
       })
       .filter(function (x) { return x.net > 0; })
       .map(function (x) {
-        return { id: uid(), tip: "satis", tarih: x.tarih, grup: x.grup, kg: x.kg, tutar: x.net };
+        return { id: uid(), tip: "satis", tarih: x.tarih, grup: x.grup, kg: x.kg, fiyat: x.fiyat, tutar: x.net };
       });
     if (entries.length === 0) return;
     state.ledger = entries.concat(state.ledger);
@@ -574,6 +662,18 @@
     state.odemeTutar = ""; state.odemeAciklama = ""; state.odemeOpen = false;
     render();
   }
+  function bakiyeKaydet() {
+    var t = parseNum(state.bakiyeTutar);
+    if (t <= 0) return;
+    state.ledger = [{
+      id: uid(), tip: "bakiye", tarih: bugun(),
+      aciklama: state.bakiyeAciklama.trim() || "Devreden bakiye",
+      tutar: t
+    }].concat(state.ledger);
+    persistLedger();
+    state.bakiyeTutar = ""; state.bakiyeAciklama = ""; state.bakiyeOpen = false;
+    render();
+  }
   function silTxn(id) {
     state.ledger = state.ledger.filter(function (t) { return t.id !== id; });
     persistLedger();
@@ -591,6 +691,36 @@
   function urunSil(ad) {
     state.urunler = state.urunler.filter(function (u) { return u !== ad; });
     persistUrunler();
+    render();
+  }
+
+  function yeniSezonaGec() {
+    if (state.ledger.length === 0) {
+      alert("Kaydedilecek bir kasa hareketi yok.");
+      return;
+    }
+    var ok = confirm("Yeni sezona geçilsin mi? Mevcut kasa defteri 'Geçmiş Sezonlar'a kaydedilip temizlenecek, kalan bakiyen yeni sezona devredecek.");
+    if (!ok) return;
+    var varsayilanAd = "Sezon " + bugun();
+    var ad = prompt("Bu sezona bir isim ver:", varsayilanAd);
+    if (ad === null) return;
+    var adFinal = ad.trim() || varsayilanAd;
+    var carry = sezonTotals(state.ledger).kalan;
+    var sezon = { id: uid(), ad: adFinal, tarih: bugun(), ledger: state.ledger };
+    state.sezonlar = [sezon].concat(state.sezonlar);
+    persistSezonlar();
+    state.ledger = carry !== 0
+      ? [{ id: uid(), tip: "bakiye", tarih: bugun(), aciklama: "Devreden bakiye (" + adFinal + ")", tutar: carry }]
+      : [];
+    persistLedger();
+    render();
+  }
+
+  function silSezon(id) {
+    var ok = confirm("Bu sezon arşivini kalıcı olarak silmek istiyor musun?");
+    if (!ok) return;
+    state.sezonlar = state.sezonlar.filter(function (s) { return s.id !== id; });
+    persistSezonlar();
     render();
   }
 
@@ -662,9 +792,25 @@
       });
       var odemeKaydetBtn = document.getElementById("odemeKaydetBtn");
       if (odemeKaydetBtn) odemeKaydetBtn.addEventListener("click", odemeKaydet);
+      var bakiyeToggleBtn = document.getElementById("bakiyeToggleBtn");
+      if (bakiyeToggleBtn) bakiyeToggleBtn.addEventListener("click", function () { state.bakiyeOpen = !state.bakiyeOpen; render(); });
+      var bakiyeTutarInput = document.getElementById("bakiyeTutarInput");
+      if (bakiyeTutarInput) bakiyeTutarInput.addEventListener("input", function () {
+        var formatted = formatInput(bakiyeTutarInput.value);
+        bakiyeTutarInput.value = formatted;
+        state.bakiyeTutar = formatted;
+      });
+      var bakiyeAciklamaInput = document.getElementById("bakiyeAciklamaInput");
+      if (bakiyeAciklamaInput) bakiyeAciklamaInput.addEventListener("input", function () {
+        state.bakiyeAciklama = bakiyeAciklamaInput.value;
+      });
+      var bakiyeKaydetBtn = document.getElementById("bakiyeKaydetBtn");
+      if (bakiyeKaydetBtn) bakiyeKaydetBtn.addEventListener("click", bakiyeKaydet);
       document.querySelectorAll("[data-del-txn]").forEach(function (btn) {
         btn.addEventListener("click", function () { silTxn(btn.getAttribute("data-del-txn")); });
       });
+      var yeniSezonBtn = document.getElementById("yeniSezonBtn");
+      if (yeniSezonBtn) yeniSezonBtn.addEventListener("click", yeniSezonaGec);
     }
 
     if (state.view === "urunler") {
@@ -675,6 +821,19 @@
       if (urunEkleBtn) urunEkleBtn.addEventListener("click", urunEkle);
       document.querySelectorAll("[data-del-urun]").forEach(function (btn) {
         btn.addEventListener("click", function () { urunSil(btn.getAttribute("data-del-urun")); });
+      });
+    }
+
+    if (state.view === "gecmis") {
+      document.querySelectorAll("[data-toggle-sezon]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var id = btn.getAttribute("data-toggle-sezon");
+          state.sezonAcikId = (state.sezonAcikId === id) ? null : id;
+          render();
+        });
+      });
+      document.querySelectorAll("[data-del-sezon]").forEach(function (btn) {
+        btn.addEventListener("click", function () { silSezon(btn.getAttribute("data-del-sezon")); });
       });
     }
   }
