@@ -389,6 +389,8 @@
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return decPart !== undefined ? intPart + "," + decPart : intPart;
   }
+  var SURUM = "v12 · 27.07.2026";
+
   /* ---------- İKONLAR (satır içi SVG, ek yükleme yok) ---------- */
   var IKON_YOLLARI = {
     fis:      '<rect x="4" y="2.5" width="16" height="19" rx="2"/><path d="M8 6.5h8M8 11h2M12 11h2M16 11h2M8 15h2M12 15h2M16 15h2M8 18.5h6"/>',
@@ -1507,6 +1509,7 @@
         "</div>" +
 
         (state.ayarMesaj ? '<div class="saved-msg">' + esc(state.ayarMesaj) + "</div>" : "") +
+        '<div style="text-align:center;color:var(--pencil);font-size:11px;padding:6px 0 2px;">KomisyonCep ' + SURUM + "</div>" +
       "</div>"
     );
   }
