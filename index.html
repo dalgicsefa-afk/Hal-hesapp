@@ -243,6 +243,8 @@
         state.rol = d.rol || "tek";
         state.bagliEposta = d.bagliEposta || "";
         state.naylonParasi = d.naylonParasi || 0;
+        state.arazi = d.arazi || 0;
+        state.araziBirim = d.araziBirim || "dönüm";
       } else {
         // İlk giriş: cihazdaki eski veriler varsa buluta taşı
         state.ledger = loadJSON(LS_LEDGER, []);
@@ -282,6 +284,8 @@
         email: (currentUser && currentUser.email) ? currentUser.email.toLowerCase() : "",
         bagliEposta: state.bagliEposta,
         naylonParasi: state.naylonParasi,
+        arazi: state.arazi,
+        araziBirim: state.araziBirim,
         paylasilanEpostalar: state.bagliEposta ? [state.bagliEposta] : [],
         guncellendi: Date.now()
       }, { merge: true }).catch(function () {});
@@ -545,6 +549,8 @@
     rol: "tek",
     bagliEposta: "",
     naylonParasi: 0,
+    arazi: 0,
+    araziBirim: "dönüm",
     karsiTaraf: null,
     ayarMesaj: "",
     sezonAcikId: null,
@@ -580,7 +586,7 @@
 
   function render() {
     // Rol değişince erişilemeyen bir ekranda kalmayı önle
-    if (state.rol === "sahip" && ["calc", "kasa", "urunler", "gecmis"].indexOf(state.view) !== -1) state.view = "ortaklik";
+    if (state.rol === "sahip" && ["calc", "urunler", "gecmis"].indexOf(state.view) !== -1) state.view = "ortaklik";
     if (state.rol === "tek" && state.view === "ortaklik") state.view = "calc";
     var root = document.getElementById("root");
     root.innerHTML = renderDrawer() + renderHeader() + renderContent();
@@ -592,6 +598,7 @@
     if (state.rol === "sahip") {
       items = [
         { v: "ortaklik", label: "🤝 Ortaklık Hesabım" },
+        { v: "kasa", label: "💰 Kasa Defterim" },
         { v: "grafikler", label: "📊 Grafikler" },
         { v: "ayarlar", label: "⚙️ Ayarlar" }
       ];
@@ -754,7 +761,87 @@
 
   /* ---------- KASA DEFTERI ---------- */
 
+  function araziSatiri(tutar) {
+    if (!state.arazi || state.arazi <= 0) return "";
+    var birim = state.araziBirim || "dönüm";
+    var basina = tutar / state.arazi;
+    return '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #D9CBA8;font-size:12px;color:#A89878;display:flex;justify-content:space-between;">' +
+      "<span>" + kgFmt(state.arazi) + " " + birim + " · " + birim + " başına</span>" +
+      '<span style="color:#5C4A34;font-weight:600;">' + tl(basina) + " ₺</span>" +
+    "</div>";
+  }
+
+  function renderKasaSahip() {
+    if (!state.bagliEposta || !state.karsiTaraf) {
+      return '<div class="content"><div class="empty-note">Kasanın çalışması için önce <b>Ayarlar</b>\'dan ortakçının e-postasını bağlaman gerekiyor (ortakçının da seni eklemesi lazım).</div></div>';
+    }
+
+    var defter = (state.karsiTaraf && state.karsiTaraf.ledger) || [];
+    var h = ortaklikHesabi(defter, state.naylonParasi || 0);
+    var pay = h.sahip.net;
+    var alinan = state.ledger.filter(function (t) { return t.tip === "odeme"; })
+                             .reduce(function (s, t) { return s + t.tutar; }, 0);
+    var kalan = pay - alinan;
+
+    var formHtml = "";
+    if (state.odemeOpen) {
+      formHtml =
+        '<div class="card card-pad" style="display:flex;flex-direction:column;gap:12px;">' +
+          '<div>' +
+            '<div class="field-label" style="margin-bottom:4px;">Tutar (₺)</div>' +
+            '<input class="name-input" style="border-bottom:1px solid #D9CBA8;padding-bottom:6px;" inputmode="decimal" placeholder="0" value="' + esc(state.odemeTutar) + '" id="odemeTutarInput">' +
+          "</div>" +
+          '<div>' +
+            '<div class="field-label" style="margin-bottom:4px;">Açıklama (opsiyonel)</div>' +
+            '<input class="name-input" style="border-bottom:1px solid #D9CBA8;padding-bottom:6px;" placeholder="örn. Nakit" value="' + esc(state.odemeAciklama) + '" id="odemeAciklamaInput">' +
+          "</div>" +
+          '<button class="btn btn-green" id="odemeKaydetBtn">Kaydet</button>' +
+        "</div>";
+    }
+
+    var sirali = state.ledger.filter(function (t) { return t.tip === "odeme"; })
+                             .sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    var txnHtml = sirali.length === 0
+      ? '<div class="empty-note">Henüz para çekme kaydı yok.</div>'
+      : sirali.map(function (t) {
+          return (
+            '<div class="txn">' +
+              '<div style="min-width:0;">' +
+                '<div class="txn-desc">' + esc(t.aciklama) + "</div>" +
+                '<div class="txn-meta">' + esc(t.tarih) + " · Para alındı</div>" +
+              "</div>" +
+              '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px;">' +
+                '<span class="txn-amt minus">− ' + tl(t.tutar) + " ₺</span>" +
+                '<button class="txn-del" data-del-txn="' + t.id + '">✕</button>' +
+              "</div>" +
+            "</div>"
+          );
+        }).join('<div style="height:8px"></div>');
+
+    return (
+      '<div class="content">' +
+        '<div class="card card-pad">' +
+          '<div class="line" style="margin-bottom:8px;"><span class="lbl">Ortaklık Payım</span><span class="val strong">' + tl(pay) + " ₺</span></div>" +
+          '<div class="line" style="margin-bottom:8px;"><span class="lbl">Aldığım Para</span><span class="val muted">− ' + tl(alinan) + " ₺</span></div>" +
+          '<div class="hr" style="margin:8px 0;"></div>' +
+          '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">KALAN ALACAĞIM</span>' +
+            '<span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
+            (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
+          (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Payından fazla para almışsın.</div>' : "") +
+          araziSatiri(pay) +
+        "</div>" +
+        '<button class="btn btn-red" id="odemeToggleBtn">+ PARA ALDIM</button>' +
+        formHtml +
+        '<div>' +
+          '<div class="section-label">Hareketler</div>' +
+          txnHtml +
+        "</div>" +
+      "</div>"
+    );
+  }
+
   function renderKasa() {
+    if (state.rol === "sahip") return renderKasaSahip();
     var toplamSatis = state.ledger.filter(function (t) { return t.tip === "satis"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var toplamBakiye = state.ledger.filter(function (t) { return t.tip === "bakiye"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
     var toplamOdeme = state.ledger.filter(function (t) { return t.tip === "odeme"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
@@ -867,6 +954,7 @@
           '<div class="hr" style="margin:8px 0;"></div>' +
           '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
           (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Aldığın para kazandığından fazla — hale borçlusun.</div>' : "") +
+          araziSatiri(toplamSatis) +
         "</div>" +
         '<button class="btn btn-red" id="odemeToggleBtn">+ HALDEN PARA ALDIM</button>' +
         formHtml +
@@ -988,6 +1076,46 @@
       .catch(function () { state.karsiTaraf = null; });
   }
 
+  function urunDetayHtml(defter) {
+    var map = {};
+    (defter || []).filter(function (t) { return t.tip === "satis"; }).forEach(function (t) {
+      var k = t.grup || "Diğer";
+      if (!map[k]) map[k] = { kg: 0, tutar: 0 };
+      map[k].kg += t.kg || 0;
+      map[k].tutar += t.tutar || 0;
+    });
+    var liste = Object.keys(map).map(function (ad) {
+      return { ad: ad, kg: map[ad].kg, tutar: map[ad].tutar };
+    }).sort(function (a, b) { return b.tutar - a.tutar; });
+
+    if (liste.length === 0) {
+      return '<div class="card card-pad"><div class="empty-note">Henüz satış kaydı yok.</div></div>';
+    }
+
+    var toplamKg = 0, toplamTutar = 0;
+    liste.forEach(function (u) { toplamKg += u.kg; toplamTutar += u.tutar; });
+
+    return (
+      '<div class="card card-pad">' +
+        '<div class="prod-name" style="margin-bottom:10px;">Ürün Detayı</div>' +
+        liste.map(function (u) {
+          var ortKg = u.kg > 0 ? (u.tutar / u.kg) : 0;
+          return (
+            '<div style="padding:8px 0;border-bottom:1px solid #E5DCC5;">' +
+              '<div style="font-weight:700;font-size:14px;color:#2B2118;margin-bottom:4px;">' + esc(u.ad) + "</div>" +
+              '<div class="line" style="font-size:13px;"><span class="lbl">' + kgFmt(u.kg) + " kg × ort. " + tl(ortKg) + ' ₺/kg</span><span class="val">' + tl(u.tutar) + " ₺</span></div>" +
+              '<div class="line" style="font-size:13px;margin-top:2px;"><span class="lbl muted">Bana düşen (%50)</span><span class="val strong">' + tl(u.tutar / 2) + " ₺</span></div>" +
+            "</div>"
+          );
+        }).join("") +
+        '<div style="padding-top:10px;">' +
+          '<div class="line"><span class="lbl" style="font-weight:700;">Toplam</span><span class="val" style="font-weight:700;">' + kgFmt(toplamKg) + " kg · " + tl(toplamTutar) + " ₺</span></div>" +
+          '<div class="line" style="margin-top:4px;"><span class="lbl" style="font-weight:700;">Toplam Payım</span><span class="val strong" style="font-size:17px;">' + tl(toplamTutar / 2) + " ₺</span></div>" +
+        "</div>" +
+      "</div>"
+    );
+  }
+
   function renderOrtaklik() {
     if (!state.bagliEposta) {
       return '<div class="content"><div class="empty-note">Henüz bağlı bir hesap yok. Menüden <b>Ayarlar</b>\'a girip ' +
@@ -1029,6 +1157,7 @@
             '<span style="font-weight:700;font-size:22px;color:' + (ben.net >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
             (ben.net < 0 ? "− " : "") + tl(Math.abs(ben.net)) + " ₺</span></div>" +
         "</div>" +
+        urunDetayHtml(defter) +
         (ortakciMi ? "" :
           '<div class="empty-note">Bu tutar ortakçının defterindeki satış ve giderlerden hesaplanır. Ortakçının kendi kasasını görmezsin, sadece sana düşen payı görürsün.</div>') +
       "</div>"
@@ -1066,6 +1195,19 @@
               '<button class="btn-small" id="naylonKaydetBtn">Kaydet</button>' +
             "</div>" +
           "</div>" : "") +
+
+        '<div class="card card-pad">' +
+          '<div class="prod-name" style="margin-bottom:4px;">Arazi Büyüklüğü</div>' +
+          '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Girersen kasa defterinde dönüm/hektar başına kazancını da görürsün.</div>' +
+          '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
+            '<button id="birimDonum" style="flex:1;padding:8px;border-radius:8px;border:2px solid ' + (state.araziBirim === "dönüm" ? "#4A7A3F" : "#D9CBA8") + ';background:' + (state.araziBirim === "dönüm" ? "#4A7A3F" : "transparent") + ';color:' + (state.araziBirim === "dönüm" ? "#F7F3E8" : "#5C4A34") + ';font-weight:700;font-size:13px;">Dönüm</button>' +
+            '<button id="birimHektar" style="flex:1;padding:8px;border-radius:8px;border:2px solid ' + (state.araziBirim === "hektar" ? "#4A7A3F" : "#D9CBA8") + ';background:' + (state.araziBirim === "hektar" ? "#4A7A3F" : "transparent") + ';color:' + (state.araziBirim === "hektar" ? "#F7F3E8" : "#5C4A34") + ';font-weight:700;font-size:13px;">Hektar</button>' +
+          "</div>" +
+          '<div class="add-row">' +
+            '<input id="araziInput" inputmode="decimal" placeholder="örn. 2" value="' + (state.arazi ? formatInput(String(state.arazi).replace(".", ",")) : "") + '">' +
+            '<button class="btn-small" id="araziKaydetBtn">Kaydet</button>' +
+          "</div>" +
+        "</div>" +
 
         (state.ayarMesaj ? '<div class="saved-msg">' + esc(state.ayarMesaj) + "</div>" : "") +
       "</div>"
@@ -1671,6 +1813,27 @@
         naylonBtn.addEventListener("click", function () {
           state.naylonParasi = parseNum(naylonInp.value);
           state.ayarMesaj = "Naylon / çift parası kaydedildi.";
+          buluteKaydet(true);
+          render();
+        });
+      }
+      var birimD = document.getElementById("birimDonum");
+      var birimH = document.getElementById("birimHektar");
+      if (birimD) birimD.addEventListener("click", function () {
+        if (state.araziBirim === "dönüm") return;
+        state.araziBirim = "dönüm"; buluteKaydet(true); render();
+      });
+      if (birimH) birimH.addEventListener("click", function () {
+        if (state.araziBirim === "hektar") return;
+        state.araziBirim = "hektar"; buluteKaydet(true); render();
+      });
+      var araziBtn = document.getElementById("araziKaydetBtn");
+      if (araziBtn) {
+        var araziInp = document.getElementById("araziInput");
+        araziInp.addEventListener("input", function () { araziInp.value = formatInput(araziInp.value); });
+        araziBtn.addEventListener("click", function () {
+          state.arazi = parseNum(araziInp.value);
+          state.ayarMesaj = "Arazi büyüklüğü kaydedildi.";
           buluteKaydet(true);
           render();
         });
