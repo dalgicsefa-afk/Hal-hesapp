@@ -1133,6 +1133,33 @@
       .catch(function () { state.karsiTaraf = null; state.karsiTaraflar = []; });
   }
 
+  function satisHareketleriHtml(defter) {
+    var satislar = (defter || []).filter(function (t) { return t.tip === "satis"; })
+                                 .sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    if (satislar.length === 0) return "";
+
+    return (
+      '<div class="card card-pad">' +
+        '<div class="prod-name" style="margin-bottom:10px;">Satışlar (tarih tarih)</div>' +
+        satislar.map(function (t) {
+          var detay = kgFmt(t.kg || 0) + " kg";
+          if (t.fiyat) detay += " × " + tl(t.fiyat) + " ₺/kg";
+          if (t.kalite && t.kalite !== "Standart") detay += " · " + t.kalite;
+          return (
+            '<div style="padding:8px 0;border-bottom:1px solid #E5DCC5;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">' +
+                '<span style="font-weight:700;font-size:14px;color:#2B2118;">' + esc(t.grup || "Diğer") + "</span>" +
+                '<span style="font-size:11px;color:#A89878;flex-shrink:0;">' + esc(t.tarih || "") + "</span>" +
+              "</div>" +
+              '<div class="line" style="font-size:13px;margin-top:3px;"><span class="lbl">' + detay + '</span><span class="val">' + tl(t.tutar) + " ₺</span></div>" +
+              '<div class="line" style="font-size:12px;margin-top:1px;"><span class="lbl muted">Payım (%50)</span><span class="val strong" style="font-size:13px;">' + tl(t.tutar / 2) + " ₺</span></div>" +
+            "</div>"
+          );
+        }).join("") +
+      "</div>"
+    );
+  }
+
   function urunDetayHtml(defter) {
     var map = {};
     (defter || []).filter(function (t) { return t.tip === "satis"; }).forEach(function (t) {
@@ -1219,6 +1246,7 @@
               "</div>" +
             "</div>" +
             urunDetayHtml(d.ledger || []) +
+            satisHareketleriHtml(d.ledger || []) +
             (state.ayarMesaj ? '<div class="saved-msg">' + esc(state.ayarMesaj) + "</div>" : "") +
           "</div>"
         );
@@ -1308,6 +1336,7 @@
             (ben.net < 0 ? "− " : "") + tl(Math.abs(ben.net)) + " ₺</span></div>" +
         "</div>" +
         urunDetayHtml(defter) +
+        satisHareketleriHtml(defter) +
         (ortakciMi ? "" :
           '<div class="empty-note">Bu tutar ortakçının defterindeki satış ve giderlerden hesaplanır. Ortakçının kendi kasasını görmezsin, sadece sana düşen payı görürsün.</div>') +
       "</div>"
