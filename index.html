@@ -10,9 +10,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="KomisyonCep">
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script defer src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="icon" href="./icon-192.png">
 
@@ -156,7 +158,11 @@
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+  <img src="./icon-192.png" alt="" width="72" height="72" style="border-radius:16px;">
+  <div style="color:#C1442E;font-size:12px;text-transform:uppercase;font-weight:700;letter-spacing:0.08em;">KomisyonCep</div>
+  <div style="color:#B8A98A;font-size:13px;">Yükleniyor...</div>
+</div></div>
 <div id="receiptPrint" class="receipt-print"></div>
 
 <script>
@@ -172,10 +178,15 @@
     messagingSenderId: "789546692165",
     appId: "1:789546692165:web:57acba9cafb4418f6bfd2c"
   };
-  firebase.initializeApp(firebaseConfig);
-  var auth = firebase.auth();
-  var db = firebase.firestore();
-  try { db.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
+  var auth = null;
+  var db = null;
+
+  function firebaseBaslat() {
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db = firebase.firestore();
+    try { db.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
+  }
 
   var LS_LEDGER = "hal_defteri_v1";
   var LS_URUNLER = "hal_urunler_v1";
@@ -529,13 +540,15 @@
         return;
       }
       buluttanYukle().then(function () {
-        return karsiTarafiYukle();
-      }).then(function () {
         state.view = (state.rol === "sahip") ? "ortaklik" : "calc";
         state.rows = [newRow()];
         state.ayarMesaj = "";
         render();
         canliDinlemeyiBaslat();
+        // Ortak/yer sahibi verisi arka planda gelsin, açılışı bekletmesin
+        karsiTarafiYukle().then(function () {
+          if (state.rol !== "tek") render();
+        });
       });
     });
   }
@@ -2050,7 +2063,16 @@
     }
   }
 
-  startApp();
+  function baslat() {
+    firebaseBaslat();
+    startApp();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", baslat);
+  } else {
+    baslat();
+  }
 })();
 </script>
 </body>
