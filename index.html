@@ -473,7 +473,8 @@
     var kodRef = db.collection("kodlar").doc(kod);
     kodRef.get().then(function (snap) {
       if (!snap.exists) throw { code: "kod/yok" };
-      if (snap.data().kullanildi) throw { code: "kod/kullanilmis" };
+      var kd = snap.data() || {};
+      if (kd.kullanildi || kd.Kullanildi) throw { code: "kod/kullanilmis" };
       return auth.createUserWithEmailAndPassword(mail, sifre);
     }).then(function (cred) {
       return db.collection("users").doc(cred.user.uid).set({
