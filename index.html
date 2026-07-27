@@ -180,6 +180,7 @@
   var LS_LEDGER = "hal_defteri_v1";
   var LS_URUNLER = "hal_urunler_v1";
   var LS_SEZONLAR = "hal_sezonlar_v1";
+  var LS_ORTAKCILAR = "hal_ortakcilar_v1";
 
   function loadJSON(key, fallback) {
     try {
@@ -193,6 +194,37 @@
 
   var currentUser = null;
   var saveTimer = null;
+  var canliDinleyici = null;
+
+  function canliDinlemeyiBaslat() {
+    canliDinlemeyiDurdur();
+    var ref = userDoc();
+    if (!ref) return;
+    canliDinleyici = ref.onSnapshot(function (snap) {
+      // Kendi yazdığımız değişikliği geri okumaya gerek yok
+      if (snap.metadata.hasPendingWrites) return;
+      if (!snap.exists) return;
+      // Kullanıcı o an bir şey yazıyorsa (kaydetme bekliyorsa) ezme
+      if (saveTimer) return;
+      var d = snap.data() || {};
+      var yeni = JSON.stringify([d.ledger, d.urunler, d.sezonlar, d.ortakcilar]);
+      var eski = JSON.stringify([state.ledger, state.urunler, state.sezonlar, state.ortakcilar]);
+      if (yeni === eski) return;
+      state.ledger = Array.isArray(d.ledger) ? d.ledger : [];
+      state.urunler = Array.isArray(d.urunler) ? d.urunler : [];
+      state.sezonlar = Array.isArray(d.sezonlar) ? d.sezonlar : [];
+      state.ortakcilar = Array.isArray(d.ortakcilar) ? d.ortakcilar : [];
+      saveJSON(LS_LEDGER, state.ledger);
+      saveJSON(LS_URUNLER, state.urunler);
+      saveJSON(LS_SEZONLAR, state.sezonlar);
+      saveJSON(LS_ORTAKCILAR, state.ortakcilar);
+      render();
+    }, function () {});
+  }
+
+  function canliDinlemeyiDurdur() {
+    if (canliDinleyici) { try { canliDinleyici(); } catch (e) {} canliDinleyici = null; }
+  }
 
   function userDoc() {
     return currentUser ? db.collection("users").doc(currentUser.uid) : null;
@@ -207,11 +239,16 @@
         state.ledger = Array.isArray(d.ledger) ? d.ledger : [];
         state.urunler = Array.isArray(d.urunler) ? d.urunler : [];
         state.sezonlar = Array.isArray(d.sezonlar) ? d.sezonlar : [];
+        state.ortakcilar = Array.isArray(d.ortakcilar) ? d.ortakcilar : [];
+        state.rol = d.rol || "tek";
+        state.bagliEposta = d.bagliEposta || "";
+        state.naylonParasi = d.naylonParasi || 0;
       } else {
         // İlk giriş: cihazdaki eski veriler varsa buluta taşı
         state.ledger = loadJSON(LS_LEDGER, []);
         state.urunler = loadJSON(LS_URUNLER, []);
         state.sezonlar = loadJSON(LS_SEZONLAR, []);
+        state.ortakcilar = loadJSON(LS_ORTAKCILAR, []);
         return buluteKaydet(true).then(function () { return true; });
       }
       return true;
@@ -220,6 +257,7 @@
       state.ledger = loadJSON(LS_LEDGER, []);
       state.urunler = loadJSON(LS_URUNLER, []);
       state.sezonlar = loadJSON(LS_SEZONLAR, []);
+        state.ortakcilar = loadJSON(LS_ORTAKCILAR, []);
       return false;
     });
   }
@@ -229,6 +267,7 @@
     saveJSON(LS_LEDGER, state.ledger);
     saveJSON(LS_URUNLER, state.urunler);
     saveJSON(LS_SEZONLAR, state.sezonlar);
+    saveJSON(LS_ORTAKCILAR, state.ortakcilar);
 
     var ref = userDoc();
     if (!ref) return Promise.resolve();
@@ -238,6 +277,12 @@
         ledger: state.ledger,
         urunler: state.urunler,
         sezonlar: state.sezonlar,
+        ortakcilar: state.ortakcilar,
+        rol: state.rol,
+        email: (currentUser && currentUser.email) ? currentUser.email.toLowerCase() : "",
+        bagliEposta: state.bagliEposta,
+        naylonParasi: state.naylonParasi,
+        paylasilanEpostalar: state.bagliEposta ? [state.bagliEposta] : [],
         guncellendi: Date.now()
       }, { merge: true }).catch(function () {});
     };
@@ -295,6 +340,33 @@
   var authEmail = "";
   var authSifre = "";
   var authKod = "";
+  var authRol = "tek";   // "tek" | "ortakci" | "sahip"
+
+  var ROLLER = [
+    { v: "tek",     ad: "Tek Başıma",  aciklama: "Ortağım yok. Tüm hesap bana ait." },
+    { v: "ortakci", ad: "Ortakçı",     aciklama: "Mal girişini ben yaparım, yer sahibiyle bölüşürüz." },
+    { v: "sahip",   ad: "Yer Sahibi",  aciklama: "Mal girişi yapmam, ortakçıdan payımı takip ederim." }
+  ];
+
+  function rolSecenekleriHtml(secili, idOnEk) {
+    return '<div style="display:flex;flex-direction:column;gap:8px;">' +
+      ROLLER.map(function (r) {
+        var aktif = secili === r.v;
+        return '<button id="' + idOnEk + "-" + r.v + '" style="text-align:left;padding:10px 12px;border-radius:8px;border:2px solid ' +
+          (aktif ? "#4A7A3F" : "#D9CBA8") + ';background:' + (aktif ? "#4A7A3F" : "transparent") + ';">' +
+          '<div style="font-weight:700;font-size:14px;color:' + (aktif ? "#F7F3E8" : "#2B2118") + ';">' + r.ad + "</div>" +
+          '<div style="font-size:11px;margin-top:2px;line-height:1.35;color:' + (aktif ? "#D9CBA8" : "#A89878") + ';">' + r.aciklama + "</div>" +
+        "</button>";
+      }).join("") +
+    "</div>";
+  }
+
+  function rolSecenekleriniBagla(idOnEk, seciliyorsa) {
+    ROLLER.forEach(function (r) {
+      var b = document.getElementById(idOnEk + "-" + r.v);
+      if (b) b.addEventListener("click", function () { seciliyorsa(r.v); });
+    });
+  }
 
   function renderAuth() {
     var kayitMi = authMod === "kayit";
@@ -315,6 +387,10 @@
             '<input id="authSifre" type="password" placeholder="En az 6 karakter" value="' + esc(authSifre) + '" style="width:100%;background:transparent;border:none;border-bottom:1px solid #D9CBA8;padding-bottom:8px;font-size:16px;color:#2B2118;outline:none;">' +
           "</div>" +
           (kayitMi ?
+            '<div>' +
+              '<div class="field-label" style="margin-bottom:8px;">Hesap Türü</div>' +
+              rolSecenekleriHtml(authRol, "kayitRol") +
+            "</div>" +
             '<div>' +
               '<div class="field-label" style="margin-bottom:4px;">Erişim Kodu</div>' +
               '<input id="authKod" autocapitalize="characters" autocorrect="off" placeholder="Sana verilen kod" value="' + esc(authKod) + '" style="width:100%;background:transparent;border:none;border-bottom:1px solid #D9CBA8;padding-bottom:8px;font-size:16px;color:#2B2118;outline:none;text-transform:uppercase;">' +
@@ -344,6 +420,7 @@
     });
     var sifirla = document.getElementById("sifreSifirlaBtn");
     if (sifirla) sifirla.addEventListener("click", sifreSifirla);
+    rolSecenekleriniBagla("kayitRol", function (v) { authRol = v; renderAuth(); });
   }
 
   function authHataMetni(err) {
@@ -399,6 +476,13 @@
       if (snap.data().kullanildi) throw { code: "kod/kullanilmis" };
       return auth.createUserWithEmailAndPassword(mail, sifre);
     }).then(function (cred) {
+      return db.collection("users").doc(cred.user.uid).set({
+        rol: authRol,
+        email: mail.toLowerCase(),
+        paylasilanEpostalar: [],
+        ledger: [], urunler: [], sezonlar: [], ortakcilar: []
+      }, { merge: true }).then(function () { return cred; });
+    }).then(function (cred) {
       return kodRef.set({
         kullanildi: true,
         uid: cred.user.uid,
@@ -428,6 +512,7 @@
     auth.onAuthStateChanged(function (user) {
       currentUser = user;
       if (!user) {
+        canliDinlemeyiDurdur();
         authMesgul = false;
         authSifre = "";
         authKod = "";
@@ -435,9 +520,13 @@
         return;
       }
       buluttanYukle().then(function () {
-        state.view = "calc";
+        return karsiTarafiYukle();
+      }).then(function () {
+        state.view = (state.rol === "sahip") ? "ortaklik" : "calc";
         state.rows = [newRow()];
+        state.ayarMesaj = "";
         render();
+        canliDinlemeyiBaslat();
       });
     });
   }
@@ -451,6 +540,12 @@
     ledger: [],
     urunler: [],
     sezonlar: [],
+    ortakcilar: [],
+    rol: "tek",
+    bagliEposta: "",
+    naylonParasi: 0,
+    karsiTaraf: null,
+    ayarMesaj: "",
     sezonAcikId: null,
     savedMsg: false,
     odemeOpen: false,
@@ -483,19 +578,33 @@
   /* ---------- RENDER: SHELL ---------- */
 
   function render() {
+    // Rol değişince erişilemeyen bir ekranda kalmayı önle
+    if (state.rol === "sahip" && ["calc", "kasa", "urunler", "gecmis"].indexOf(state.view) !== -1) state.view = "ortaklik";
+    if (state.rol === "tek" && state.view === "ortaklik") state.view = "calc";
     var root = document.getElementById("root");
     root.innerHTML = renderDrawer() + renderHeader() + renderContent();
     bindEvents();
   }
 
   function renderDrawer() {
-    var items = [
-      { v: "calc", label: "🧮 Fiş Hesapla" },
-      { v: "kasa", label: "💰 Kasa Defterim" },
-      { v: "urunler", label: "📦 Ürünlerim" },
-      { v: "gecmis", label: "📜 Geçmiş Sezonlar" },
-      { v: "grafikler", label: "📊 Grafikler" }
-    ];
+    var items;
+    if (state.rol === "sahip") {
+      items = [
+        { v: "ortaklik", label: "🤝 Ortaklık Hesabım" },
+        { v: "grafikler", label: "📊 Grafikler" },
+        { v: "ayarlar", label: "⚙️ Ayarlar" }
+      ];
+    } else {
+      items = [
+        { v: "calc", label: "🧮 Fiş Hesapla" },
+        { v: "kasa", label: "💰 Kasa Defterim" },
+        { v: "urunler", label: "📦 Ürünlerim" }
+      ];
+      if (state.rol === "ortakci") items.push({ v: "ortaklik", label: "🤝 Ortaklık Hesabım" });
+      items.push({ v: "gecmis", label: "📜 Geçmiş Sezonlar" });
+      items.push({ v: "grafikler", label: "📊 Grafikler" });
+      items.push({ v: "ayarlar", label: "⚙️ Ayarlar" });
+    }
     var itemsHtml = items.map(function (it) {
       return '<button class="drawer-item ' + (state.view === it.v ? "active" : "") + '" data-view="' + it.v + '">' + it.label + "</button>";
     }).join("");
@@ -512,13 +621,15 @@
   }
 
   function renderHeader() {
-    var titles = { calc: "Komisyon Hesaplayıcı", kasa: "Kasa Defterim", urunler: "Ürünlerim", gecmis: "Geçmiş Sezonlar", grafikler: "Grafikler" };
+    var titles = { calc: "Komisyon Hesaplayıcı", kasa: "Kasa Defterim", urunler: "Ürünlerim", gecmis: "Geçmiş Sezonlar", grafikler: "Grafikler", ortaklik: "Ortaklık Hesabım", ayarlar: "Ayarlar" };
     var subs = {
       calc: "Kg, fiyat ve komisyon oranını gir.",
       kasa: "Ne kazandın, ne aldın, ne kaldı.",
       urunler: "Ürün bazında kg ve kazanç.",
       gecmis: "Önceki sezonların özeti.",
-      grafikler: "Bu sezon ve geçen sezon karşılaştırması."
+      grafikler: "Bu sezon ve geçen sezon karşılaştırması.",
+      ortaklik: state.rol === "sahip" ? "Ortakçından sana düşen pay." : "Yer sahibiyle ortaklık hesabın.",
+      ayarlar: "Hesap türü ve bağlantı ayarları."
     };
     return (
       '<div class="header">' +
@@ -537,6 +648,8 @@
     if (state.view === "kasa") return renderKasa();
     if (state.view === "urunler") return renderUrunler();
     if (state.view === "gecmis") return renderGecmisSezonlar();
+    if (state.view === "ortaklik") return renderOrtaklik();
+    if (state.view === "ayarlar") return renderAyarlar();
     return renderGrafikler();
   }
 
@@ -817,6 +930,146 @@
   }
 
   /* ---------- GECMIS SEZONLAR ---------- */
+
+  /* ---------- ORTAKLIK HESABI ---------- */
+  /* Kurallar:
+     - Satışın %50'si yer sahibinin, %50'si ortakçının
+     - İlaç ve fide giderleri yarı yarıya
+     - İşçi parası tamamen ortakçının
+     - Kira tamamen yer sahibinin
+     - Naylon/çift parası: yer sahibi belirler, ortakçının kasasından düşülüp yer sahibine yazılır */
+
+  function ortaklikHesabi(ledger, naylon) {
+    var satis = 0, ilac = 0, fide = 0, isci = 0, kira = 0;
+    (ledger || []).forEach(function (t) {
+      if (t.tip === "satis") satis += t.tutar;
+      else if (t.tip === "gider") {
+        if (t.giderTur === "ilac") ilac += t.tutar;
+        else if (t.giderTur === "fide") fide += t.tutar;
+        else if (t.giderTur === "isci") isci += t.tutar;
+        else if (t.giderTur === "kira") kira += t.tutar;
+      }
+    });
+    naylon = naylon || 0;
+
+    var ortakci = {
+      satisPayi: satis / 2,
+      ilacPayi: ilac / 2,
+      fidePayi: fide / 2,
+      isci: isci,
+      naylon: naylon,
+      net: (satis / 2) - (ilac / 2) - (fide / 2) - isci - naylon
+    };
+    var sahip = {
+      satisPayi: satis / 2,
+      ilacPayi: ilac / 2,
+      fidePayi: fide / 2,
+      kira: kira,
+      naylon: naylon,
+      net: (satis / 2) - (ilac / 2) - (fide / 2) - kira + naylon
+    };
+    return { satis: satis, ilac: ilac, fide: fide, isci: isci, kira: kira, ortakci: ortakci, sahip: sahip };
+  }
+
+  function karsiTarafiYukle() {
+    if (!state.bagliEposta || !currentUser) { state.karsiTaraf = null; return Promise.resolve(); }
+    return db.collection("users")
+      .where("paylasilanEpostalar", "array-contains", (currentUser.email || "").toLowerCase())
+      .limit(5).get()
+      .then(function (qs) {
+        var bulunan = null;
+        qs.forEach(function (doc) {
+          var d = doc.data() || {};
+          if ((d.email || "") === state.bagliEposta) bulunan = d;
+        });
+        state.karsiTaraf = bulunan;
+      })
+      .catch(function () { state.karsiTaraf = null; });
+  }
+
+  function renderOrtaklik() {
+    if (!state.bagliEposta) {
+      return '<div class="content"><div class="empty-note">Henüz bağlı bir hesap yok. Menüden <b>Ayarlar</b>\'a girip ' +
+        (state.rol === "sahip" ? "ortakçının" : "yer sahibinin") +
+        ' e-postasını ekle.</div></div>';
+    }
+    if (!state.karsiTaraf) {
+      return '<div class="content"><div class="empty-note">Bağlı hesabın verisi okunamadı.<br><br>Karşı tarafın da <b>Ayarlar</b>\'dan senin e-postanı eklemiş olması gerekiyor. İkiniz de birbirinizi ekledikten sonra burası dolacak.</div></div>';
+    }
+
+    var ortakciMi = state.rol === "ortakci";
+    // Satış/gider verisi HER ZAMAN ortakçının defterinden gelir
+    var defter = ortakciMi ? state.ledger : (state.karsiTaraf.ledger || []);
+    // Naylon parasını HER ZAMAN yer sahibi belirler
+    var naylon = ortakciMi ? (state.karsiTaraf.naylonParasi || 0) : (state.naylonParasi || 0);
+
+    var h = ortaklikHesabi(defter, naylon);
+    var ben = ortakciMi ? h.ortakci : h.sahip;
+
+    var satirlar = "";
+    satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Satış payım (%50)</span><span class="val strong">' + tl(ben.satisPayi) + " ₺</span></div>";
+    if (h.ilac > 0) satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">İlaç payım (yarısı)</span><span class="val muted">− ' + tl(ben.ilacPayi) + " ₺</span></div>";
+    if (h.fide > 0) satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Fide payım (yarısı)</span><span class="val muted">− ' + tl(ben.fidePayi) + " ₺</span></div>";
+    if (ortakciMi) {
+      if (h.isci > 0) satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">İşçi parası (tamamı bende)</span><span class="val muted">− ' + tl(ben.isci) + " ₺</span></div>";
+      if (naylon > 0) satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Naylon / çift parası</span><span class="val muted">− ' + tl(naylon) + " ₺</span></div>";
+    } else {
+      if (h.kira > 0) satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Kira (tamamı bende)</span><span class="val muted">− ' + tl(ben.kira) + " ₺</span></div>";
+      if (naylon > 0) satirlar += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Naylon / çift parası</span><span class="val strong">+ ' + tl(naylon) + " ₺</span></div>";
+    }
+
+    return (
+      '<div class="content">' +
+        '<div class="card card-pad">' +
+          '<div style="font-size:12px;color:#A89878;margin-bottom:10px;">Bağlı hesap: ' + esc(state.bagliEposta) + "</div>" +
+          satirlar +
+          '<div class="hr" style="margin:8px 0;"></div>' +
+          '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">NET PAYIM</span>' +
+            '<span style="font-weight:700;font-size:22px;color:' + (ben.net >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
+            (ben.net < 0 ? "− " : "") + tl(Math.abs(ben.net)) + " ₺</span></div>" +
+        "</div>" +
+        (ortakciMi ? "" :
+          '<div class="empty-note">Bu tutar ortakçının defterindeki satış ve giderlerden hesaplanır. Ortakçının kendi kasasını görmezsin, sadece sana düşen payı görürsün.</div>') +
+      "</div>"
+    );
+  }
+
+  /* ---------- AYARLAR ---------- */
+
+  function renderAyarlar() {
+    var sahipMi = state.rol === "sahip";
+    var tekMi = state.rol === "tek";
+    return (
+      '<div class="content">' +
+        '<div class="card card-pad">' +
+          '<div class="prod-name" style="margin-bottom:10px;">Hesap Türüm</div>' +
+          rolSecenekleriHtml(state.rol, "ayarRol") +
+        "</div>" +
+
+        (tekMi ? "" :
+        '<div class="card card-pad">' +
+          '<div class="prod-name" style="margin-bottom:4px;">' + (sahipMi ? "Ortakçımın E-postası" : "Yer Sahibinin E-postası") + "</div>" +
+          '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Bağlantının çalışması için karşı tarafın da senin e-postanı eklemesi gerekir.</div>' +
+          '<div class="add-row">' +
+            '<input id="bagliEpostaInput" type="email" inputmode="email" autocapitalize="none" autocorrect="off" placeholder="ornek@mail.com" value="' + esc(state.bagliEposta) + '">' +
+            '<button class="btn-small" id="bagliKaydetBtn">Kaydet</button>' +
+          "</div>" +
+        "</div>") +
+
+        (sahipMi ?
+          '<div class="card card-pad">' +
+            '<div class="prod-name" style="margin-bottom:4px;">Naylon / Çift Parası</div>' +
+            '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Sezonluk sabit tutar. Ortakçının kasasından düşülür, senin payına eklenir.</div>' +
+            '<div class="add-row">' +
+              '<input id="naylonInput" inputmode="decimal" placeholder="0" value="' + (state.naylonParasi ? formatInput(String(state.naylonParasi).replace(".", ",")) : "") + '">' +
+              '<button class="btn-small" id="naylonKaydetBtn">Kaydet</button>' +
+            "</div>" +
+          "</div>" : "") +
+
+        (state.ayarMesaj ? '<div class="saved-msg">' + esc(state.ayarMesaj) + "</div>" : "") +
+      "</div>"
+    );
+  }
 
   function sezonTotals(ledger) {
     var satis = ledger.filter(function (t) { return t.tip === "satis"; }).reduce(function (s, t) { return s + t.tutar; }, 0);
@@ -1380,6 +1633,47 @@
     if (state.view === "grafikler") {
       drawKasaChart();
       drawSezonKarsilastirma();
+    }
+
+    if (state.view === "ayarlar") {
+      rolSecenekleriniBagla("ayarRol", function (v) {
+        if (state.rol === v) return;
+        state.rol = v;
+        state.ayarMesaj = "Hesap türü güncellendi.";
+        if (v === "tek") { state.bagliEposta = ""; state.karsiTaraf = null; }
+        buluteKaydet(true);
+        render();
+      });
+
+      var bagliBtn = document.getElementById("bagliKaydetBtn");
+      if (bagliBtn) bagliBtn.addEventListener("click", function () {
+        var inp = document.getElementById("bagliEpostaInput");
+        var deger = String(inp.value || "").trim().toLowerCase();
+        if (deger && deger.indexOf("@") === -1) {
+          state.ayarMesaj = "Geçerli bir e-posta yaz.";
+          render(); return;
+        }
+        state.bagliEposta = deger;
+        state.ayarMesaj = deger ? "Bağlantı kaydedildi." : "Bağlantı kaldırıldı.";
+        buluteKaydet(true).then(function () {
+          return karsiTarafiYukle();
+        }).then(function () { render(); });
+        render();
+      });
+
+      var naylonBtn = document.getElementById("naylonKaydetBtn");
+      if (naylonBtn) {
+        var naylonInp = document.getElementById("naylonInput");
+        naylonInp.addEventListener("input", function () {
+          naylonInp.value = formatInput(naylonInp.value);
+        });
+        naylonBtn.addEventListener("click", function () {
+          state.naylonParasi = parseNum(naylonInp.value);
+          state.ayarMesaj = "Naylon / çift parası kaydedildi.";
+          buluteKaydet(true);
+          render();
+        });
+      }
     }
   }
 
