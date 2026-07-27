@@ -1,6 +1,6 @@
 {
-  "name": "Hal Fiş Hesabı",
-  "short_name": "Hal Hesap",
+  "name": "KomisyonCep",
+  "short_name": "KomisyonCep",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
