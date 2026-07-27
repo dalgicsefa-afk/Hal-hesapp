@@ -37,8 +37,10 @@
 
   /* Header */
   .header { background:#2B2118; padding:32px 20px 24px; border-bottom:4px dashed #4A7A3F; position:relative; }
-  .hamburger { position:absolute; left:20px; top:32px; background:none; border:none; padding:6px; display:flex; flex-direction:column; gap:5px; border-radius:8px; }
-  .hamburger span { width:24px; height:3px; background:#FFFFFF; border-radius:2px; display:block; }
+  .hamburger { position:absolute; left:16px; top:26px; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.22); padding:10px 9px; display:flex; flex-direction:column; gap:5px; border-radius:10px; opacity:1; }
+  .hamburger span { width:24px; height:3px; background:#FFFFFF; border-radius:2px; display:block; opacity:1; }
+  /* Emoji simgeleri her platformda aynı boyutta görünsün */
+  .mi { display:inline-block; width:26px; font-size:15px; line-height:1; }
   .header-center { text-align:center; }
   .eyebrow { color:#C1442E; font-size:12px; text-transform:uppercase; font-weight:700; letter-spacing:0.08em; }
   .header h1 { color:#F7F3E8; font-size:24px; margin:4px 0 0; }
@@ -618,21 +620,21 @@
     var items;
     if (state.rol === "sahip") {
       items = [
-        { v: "ortaklik", label: "🤝 Ortaklık Hesabım" },
-        { v: "kasa", label: "💰 Kasa Defterim" },
-        { v: "grafikler", label: "📊 Grafikler" },
-        { v: "ayarlar", label: "⚙️ Ayarlar" }
+        { v: "ortaklik", label: "<span class=\"mi\">🤝</span>Ortaklık Hesabım" },
+        { v: "kasa", label: "<span class=\"mi\">💰</span>Kasa Defterim" },
+        { v: "grafikler", label: "<span class=\"mi\">📊</span>Grafikler" },
+        { v: "ayarlar", label: "<span class=\"mi\">⚙️</span>Ayarlar" }
       ];
     } else {
       items = [
-        { v: "calc", label: "🧮 Fiş Hesapla" },
-        { v: "kasa", label: "💰 Kasa Defterim" },
-        { v: "urunler", label: "📦 Ürünlerim" }
+        { v: "calc", label: "<span class=\"mi\">🧮</span>Fiş Hesapla" },
+        { v: "kasa", label: "<span class=\"mi\">💰</span>Kasa Defterim" },
+        { v: "urunler", label: "<span class=\"mi\">📦</span>Ürünlerim" }
       ];
-      if (state.rol === "ortakci") items.push({ v: "ortaklik", label: "🤝 Ortaklık Hesabım" });
-      items.push({ v: "gecmis", label: "📜 Geçmiş Sezonlar" });
-      items.push({ v: "grafikler", label: "📊 Grafikler" });
-      items.push({ v: "ayarlar", label: "⚙️ Ayarlar" });
+      if (state.rol === "ortakci") items.push({ v: "ortaklik", label: "<span class=\"mi\">🤝</span>Ortaklık Hesabım" });
+      items.push({ v: "gecmis", label: "<span class=\"mi\">📜</span>Geçmiş Sezonlar" });
+      items.push({ v: "grafikler", label: "<span class=\"mi\">📊</span>Grafikler" });
+      items.push({ v: "ayarlar", label: "<span class=\"mi\">⚙️</span>Ayarlar" });
     }
     var itemsHtml = items.map(function (it) {
       return '<button class="drawer-item ' + (state.view === it.v ? "active" : "") + '" data-view="' + it.v + '">' + it.label + "</button>";
@@ -644,7 +646,7 @@
           (currentUser && currentUser.email ? '<div style="color:#8A7A5E;font-size:11px;font-weight:400;margin-top:6px;word-break:break-all;">' + esc(currentUser.email) + "</div>" : "") +
         "</div>" +
         itemsHtml +
-        '<button class="drawer-item" id="cikisBtn" style="color:#C1442E;">🚪 Çıkış Yap</button>' +
+        '<button class="drawer-item" id="cikisBtn" style="color:#C1442E;"><span class="mi">🚪</span>Çıkış Yap</button>' +
       "</div>"
     );
   }
@@ -957,7 +959,7 @@
               "</div>" +
               '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:8px;">' +
                 '<span class="txn-amt ' + amtClass + '">' + sign + tl(Math.abs(t.tutar)) + " ₺</span>" +
-                '<button class="txn-del" data-print-txn="' + t.id + '" style="font-size:14px;">🖨️</button>' +
+                '<button class="txn-del" data-print-txn="' + t.id + '" style="font-size:13px;">🖨️</button>' +
                 '<button class="txn-del" data-del-txn="' + t.id + '">✕</button>' +
               "</div>" +
             "</div>"
@@ -999,7 +1001,7 @@
           '<div class="section-label">Hareketler</div>' +
           txnHtml +
         "</div>" +
-        '<button class="btn-small" id="disaAktarBtn" style="width:100%;margin-top:6px;background:#5C4A34;">⬇ CSV OLARAK İNDİR</button>' +
+        '<button class="btn-small" id="disaAktarBtn" style="width:100%;margin-top:6px;background:#5C4A34;"><span class="mi">⬇</span>CSV OLARAK İNDİR</button>' +
         '<button class="btn btn-outline" id="yeniSezonBtn" style="margin-top:6px;">↻ YENİ SEZONA GEÇ</button>' +
       "</div>"
     );
@@ -1693,28 +1695,28 @@
     return (
       '<div class="content">' +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">📅 Aylık Satış Trendi (Bu Sezon)</div>' +
+          '<div class="prod-name" style="margin-bottom:8px;"><span class="mi">📅</span>Aylık Satış Trendi (Bu Sezon)</div>' +
           '<canvas id="kasaChart" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         (son ? "" : '<div class="empty-note">Sezon karşılaştırması için Kasa Defterim\'de "Yeni Sezona Geç" ile en az bir sezonu arşivlemen gerekiyor. Aşağıdaki grafikler o zaman dolacak.</div>') +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">💵 Toplam Satış (Bu Sezon / Geçen Sezon)</div>' +
+          '<div class="prod-name" style="margin-bottom:8px;"><span class="mi">💵</span>Toplam Satış (Bu Sezon / Geçen Sezon)</div>' +
           '<canvas id="chartSatis" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">🧾 Toplam Gider (Ödeme + İşçi + Kira + İlaç-Gübre + Fide)</div>' +
+          '<div class="prod-name" style="margin-bottom:8px;"><span class="mi">🧾</span>Toplam Gider (Ödeme + İşçi + Kira + İlaç-Gübre + Fide)</div>' +
           '<canvas id="chartGider" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">⚖️ Net Kalan Bakiye</div>' +
+          '<div class="prod-name" style="margin-bottom:8px;"><span class="mi">⚖️</span>Net Kalan Bakiye</div>' +
           '<canvas id="chartKalan" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">💰 Ortalama ₺/kg Fiyatı</div>' +
+          '<div class="prod-name" style="margin-bottom:8px;"><span class="mi">💰</span>Ortalama ₺/kg Fiyatı</div>' +
           '<canvas id="chartFiyat" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
         "</div>" +
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:10px;">📦 Ürün Bazlı Kazanç Karşılaştırması</div>' +
+          '<div class="prod-name" style="margin-bottom:10px;"><span class="mi">📦</span>Ürün Bazlı Kazanç Karşılaştırması</div>' +
           urunBarsHtml +
         "</div>" +
       "</div>"
