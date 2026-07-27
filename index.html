@@ -243,6 +243,8 @@
         state.rol = d.rol || "tek";
         state.bagliEposta = d.bagliEposta || "";
         state.naylonParasi = d.naylonParasi || 0;
+        state.naylonlar = d.naylonlar || {};
+        state.ad = d.ad || "";
         state.arazi = d.arazi || 0;
         state.araziBirim = d.araziBirim || "dönüm";
       } else {
@@ -284,9 +286,11 @@
         email: (currentUser && currentUser.email) ? currentUser.email.toLowerCase() : "",
         bagliEposta: state.bagliEposta,
         naylonParasi: state.naylonParasi,
+        naylonlar: state.naylonlar,
+        ad: state.ad,
         arazi: state.arazi,
         araziBirim: state.araziBirim,
-        paylasilanEpostalar: state.bagliEposta ? [state.bagliEposta] : [],
+        paylasilanEpostalar: paylasimListesi(),
         guncellendi: Date.now()
       }, { merge: true }).catch(function () {});
     };
@@ -549,6 +553,10 @@
     rol: "tek",
     bagliEposta: "",
     naylonParasi: 0,
+    naylonlar: {},
+    ad: "",
+    karsiTaraflar: [],
+    acikOrtakciEposta: null,
     arazi: 0,
     araziBirim: "dönüm",
     karsiTaraf: null,
@@ -772,13 +780,15 @@
   }
 
   function renderKasaSahip() {
-    if (!state.bagliEposta || !state.karsiTaraf) {
-      return '<div class="content"><div class="empty-note">Kasanın çalışması için önce <b>Ayarlar</b>\'dan ortakçının e-postasını bağlaman gerekiyor (ortakçının da seni eklemesi lazım).</div></div>';
+    if (!state.karsiTaraflar || state.karsiTaraflar.length === 0) {
+      return '<div class="content"><div class="empty-note">Kasanın çalışması için önce bir ortakçının seni yer sahibi olarak eklemesi gerekiyor. Senin e-postan: <b>' + esc(benimEposta()) + "</b></div></div>";
     }
 
-    var defter = (state.karsiTaraf && state.karsiTaraf.ledger) || [];
-    var h = ortaklikHesabi(defter, state.naylonParasi || 0);
-    var pay = h.sahip.net;
+    var pay = 0;
+    state.karsiTaraflar.forEach(function (d) {
+      pay += ortaklikHesabi(d.ledger || [], ortakciNaylon(d.email)).sahip.net;
+    });
+
     var alinan = state.ledger.filter(function (t) { return t.tip === "odeme"; })
                              .reduce(function (s, t) { return s + t.tutar; }, 0);
     var kalan = pay - alinan;
@@ -952,7 +962,17 @@
           (toplamIlac > 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">İlaç & Gübre Parası</span><span class="val muted">− ' + tl(toplamIlac) + " ₺</span></div>" : "") +
           (toplamFide > 0 ? '<div class="line" style="margin-bottom:8px;"><span class="lbl">Fide Parası</span><span class="val muted">− ' + tl(toplamFide) + " ₺</span></div>" : "") +
           '<div class="hr" style="margin:8px 0;"></div>' +
-          '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
+          (function () {
+            var ortakBagli = (state.rol === "ortakci" && state.karsiTaraf);
+            if (!ortakBagli) {
+              return '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>";
+            }
+            var ktN = (state.karsiTaraf.naylonlar || {});
+            var nay = (ktN[benimEposta()] != null) ? ktN[benimEposta()] : (state.karsiTaraf.naylonParasi || 0);
+            var pay = ortaklikHesabi(state.ledger, nay).ortakci.net + toplamBakiye - toplamOdeme;
+            return '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">HALDE KALAN ALACAĞIM</span><span style="font-weight:700;font-size:22px;color:' + (pay >= 0 ? "#4A7A3F" : "#C1442E") + ';">' + (pay < 0 ? "− " : "") + tl(Math.abs(pay)) + " ₺</span></div>" +
+              '<div style="font-size:11px;color:#A89878;margin-top:4px;display:flex;justify-content:space-between;"><span>Payıma düşen · toplam kasa</span><span>' + (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>";
+          })() +
           (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Aldığın para kazandığından fazla — hale borçlusun.</div>' : "") +
           araziSatiri(toplamSatis) +
         "</div>" +
@@ -1060,20 +1080,57 @@
     return { satis: satis, ilac: ilac, fide: fide, isci: isci, kira: kira, ortakci: ortakci, sahip: sahip };
   }
 
+  function benimEposta() {
+    return ((currentUser && currentUser.email) || "").toLowerCase();
+  }
+
+  function paylasimListesi() {
+    if (state.rol === "sahip") {
+      // Yer sahibi: kendisine bağlanan tüm ortakçılarla paylaşır (naylon parasını okuyabilsinler)
+      return (state.karsiTaraflar || []).map(function (d) { return d.email; }).filter(Boolean);
+    }
+    return state.bagliEposta ? [state.bagliEposta] : [];
+  }
+
+  function ortakciNaylon(eposta) {
+    var m = state.naylonlar || {};
+    if (m[eposta] != null) return m[eposta];
+    return state.naylonParasi || 0; // eski tek-ortakçı verisi için yedek
+  }
+
   function karsiTarafiYukle() {
-    if (!state.bagliEposta || !currentUser) { state.karsiTaraf = null; return Promise.resolve(); }
+    if (!currentUser) { state.karsiTaraf = null; state.karsiTaraflar = []; return Promise.resolve(); }
     return db.collection("users")
-      .where("paylasilanEpostalar", "array-contains", (currentUser.email || "").toLowerCase())
-      .limit(5).get()
+      .where("paylasilanEpostalar", "array-contains", benimEposta())
+      .limit(30).get()
       .then(function (qs) {
+        var hepsi = [];
+        qs.forEach(function (doc) { hepsi.push(doc.data() || {}); });
+
+        if (state.rol === "sahip") {
+          // Bana bağlanan tüm ortakçılar
+          state.karsiTaraflar = hepsi.filter(function (d) { return (d.rol || "") !== "sahip"; });
+          state.karsiTaraf = state.karsiTaraflar.length ? state.karsiTaraflar[0] : null;
+          // Ortakçılar naylon parasını okuyabilsin diye paylaşım listemi güncelle
+          var gerekli = state.karsiTaraflar.map(function (d) { return d.email; }).filter(Boolean).sort().join(",");
+          if (gerekli) {
+            return db.collection("users").doc(currentUser.uid)
+              .set({ paylasilanEpostalar: gerekli.split(",") }, { merge: true })
+              .catch(function () {});
+          }
+          return null;
+        }
+
+        // Ortakçı: bağlı olduğu yer sahibini bul
         var bulunan = null;
-        qs.forEach(function (doc) {
-          var d = doc.data() || {};
+        hepsi.forEach(function (d) {
           if ((d.email || "") === state.bagliEposta) bulunan = d;
         });
         state.karsiTaraf = bulunan;
+        state.karsiTaraflar = bulunan ? [bulunan] : [];
+        return null;
       })
-      .catch(function () { state.karsiTaraf = null; });
+      .catch(function () { state.karsiTaraf = null; state.karsiTaraflar = []; });
   }
 
   function urunDetayHtml(defter) {
@@ -1116,7 +1173,98 @@
     );
   }
 
+  function ortakciGorunenAd(d) {
+    return (d && d.ad && d.ad.trim()) ? d.ad.trim() : ((d && d.email) || "İsimsiz");
+  }
+
+  function renderOrtaklikSahip() {
+    if (!state.karsiTaraflar || state.karsiTaraflar.length === 0) {
+      return '<div class="content"><div class="empty-note">Henüz bağlı ortakçı yok.<br><br>Ortakçının kendi uygulamasında <b>Ayarlar</b>\'a girip senin e-postanı (<b>' + esc(benimEposta()) + '</b>) yer sahibi olarak eklemesi gerekiyor. Ekledikten sonra burada görünecek.</div></div>';
+    }
+
+    // Detay sayfası açıksa
+    if (state.acikOrtakciEposta) {
+      var d = null;
+      state.karsiTaraflar.forEach(function (x) { if (x.email === state.acikOrtakciEposta) d = x; });
+      if (!d) { state.acikOrtakciEposta = null; }
+      else {
+        var naylon = ortakciNaylon(d.email);
+        var h = ortaklikHesabi(d.ledger || [], naylon);
+        var b = h.sahip;
+        var sat = "";
+        sat += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Satış payım (%50)</span><span class="val strong">' + tl(b.satisPayi) + " ₺</span></div>";
+        if (h.ilac > 0) sat += '<div class="line" style="margin-bottom:8px;"><span class="lbl">İlaç payım (yarısı)</span><span class="val muted">− ' + tl(b.ilacPayi) + " ₺</span></div>";
+        if (h.fide > 0) sat += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Fide payım (yarısı)</span><span class="val muted">− ' + tl(b.fidePayi) + " ₺</span></div>";
+        if (h.kira > 0) sat += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Kira (tamamı bende)</span><span class="val muted">− ' + tl(b.kira) + " ₺</span></div>";
+        if (naylon > 0) sat += '<div class="line" style="margin-bottom:8px;"><span class="lbl">Naylon / çift parası</span><span class="val strong">+ ' + tl(naylon) + " ₺</span></div>";
+
+        return (
+          '<div class="content">' +
+            '<button class="btn-small" id="ortakGeriBtn" style="width:100%;background:#5C4A34;">← Ortakçı Listesine Dön</button>' +
+            '<div class="card card-pad">' +
+              '<div class="prod-name" style="margin-bottom:2px;">' + esc(ortakciGorunenAd(d)) + "</div>" +
+              '<div style="font-size:12px;color:#A89878;margin-bottom:10px;">' + esc(d.email || "") + "</div>" +
+              sat +
+              '<div class="hr" style="margin:8px 0;"></div>' +
+              '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">BU ORTAKÇIDAN PAYIM</span>' +
+                '<span style="font-weight:700;font-size:22px;color:' + (b.net >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
+                (b.net < 0 ? "− " : "") + tl(Math.abs(b.net)) + " ₺</span></div>" +
+            "</div>" +
+            '<div class="card card-pad">' +
+              '<div class="prod-name" style="margin-bottom:4px;">Naylon / Çift Parası</div>' +
+              '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Sadece bu ortakçı için geçerli. Onun kasasından düşülür, senin payına eklenir.</div>' +
+              '<div class="add-row">' +
+                '<input id="ortakNaylonInput" inputmode="decimal" placeholder="0" value="' + (naylon ? formatInput(String(naylon).replace(".", ",")) : "") + '">' +
+                '<button class="btn-small" id="ortakNaylonKaydetBtn">Kaydet</button>' +
+              "</div>" +
+            "</div>" +
+            urunDetayHtml(d.ledger || []) +
+            (state.ayarMesaj ? '<div class="saved-msg">' + esc(state.ayarMesaj) + "</div>" : "") +
+          "</div>"
+        );
+      }
+    }
+
+    // Liste
+    var toplamPay = 0;
+    var kartlar = state.karsiTaraflar.map(function (d) {
+      var naylon = ortakciNaylon(d.email);
+      var h = ortaklikHesabi(d.ledger || [], naylon);
+      toplamPay += h.sahip.net;
+      var satisToplam = h.satis;
+      return (
+        '<div class="card card-pad" data-ortak-ac="' + esc(d.email || "") + '" style="cursor:pointer;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
+            '<div style="min-width:0;">' +
+              '<div class="prod-name" style="margin-bottom:2px;">' + esc(ortakciGorunenAd(d)) + "</div>" +
+              '<div style="font-size:11px;color:#A89878;">Toplam satış: ' + tl(satisToplam) + " ₺</div>" +
+            "</div>" +
+            '<div style="text-align:right;flex-shrink:0;">' +
+              '<div style="font-size:10px;color:#A89878;text-transform:uppercase;">Bana kazandırdığı</div>' +
+              '<div style="font-weight:700;font-size:18px;color:' + (h.sahip.net >= 0 ? "#2B6B24" : "#C1442E") + ';">' +
+                (h.sahip.net < 0 ? "− " : "") + tl(Math.abs(h.sahip.net)) + " ₺</div>" +
+            "</div>" +
+          "</div>" +
+          '<div style="font-size:11px;color:#5C4A34;margin-top:8px;">Detay için dokun →</div>' +
+        "</div>"
+      );
+    }).join("");
+
+    return (
+      '<div class="content">' +
+        '<div class="card card-pad">' +
+          '<div class="line"><span class="lbl" style="font-weight:700;font-size:15px;color:#2B2118;">TÜM ORTAKÇILARDAN TOPLAM</span>' +
+            '<span style="font-weight:700;font-size:20px;color:' + (toplamPay >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
+            (toplamPay < 0 ? "− " : "") + tl(Math.abs(toplamPay)) + " ₺</span></div>" +
+          '<div style="font-size:11px;color:#A89878;margin-top:4px;">' + state.karsiTaraflar.length + " ortakçı</div>" +
+        "</div>" +
+        kartlar +
+      "</div>"
+    );
+  }
+
   function renderOrtaklik() {
+    if (state.rol === "sahip") return renderOrtaklikSahip();
     if (!state.bagliEposta) {
       return '<div class="content"><div class="empty-note">Henüz bağlı bir hesap yok. Menüden <b>Ayarlar</b>\'a girip ' +
         (state.rol === "sahip" ? "ortakçının" : "yer sahibinin") +
@@ -1130,7 +1278,9 @@
     // Satış/gider verisi HER ZAMAN ortakçının defterinden gelir
     var defter = ortakciMi ? state.ledger : (state.karsiTaraf.ledger || []);
     // Naylon parasını HER ZAMAN yer sahibi belirler
-    var naylon = ortakciMi ? (state.karsiTaraf.naylonParasi || 0) : (state.naylonParasi || 0);
+    var kt = state.karsiTaraf || {};
+    var ktNaylonlar = kt.naylonlar || {};
+    var naylon = (ktNaylonlar[benimEposta()] != null) ? ktNaylonlar[benimEposta()] : (kt.naylonParasi || 0);
 
     var h = ortaklikHesabi(defter, naylon);
     var ben = ortakciMi ? h.ortakci : h.sahip;
@@ -1176,10 +1326,19 @@
           rolSecenekleriHtml(state.rol, "ayarRol") +
         "</div>" +
 
-        (tekMi ? "" :
         '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:4px;">' + (sahipMi ? "Ortakçımın E-postası" : "Yer Sahibinin E-postası") + "</div>" +
-          '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Bağlantının çalışması için karşı tarafın da senin e-postanı eklemesi gerekir.</div>' +
+          '<div class="prod-name" style="margin-bottom:4px;">Ad Soyad</div>' +
+          '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">' + (sahipMi ? "Ortakçıların seni bu isimle görür." : "Yer sahibi seni bu isimle görür.") + "</div>" +
+          '<div class="add-row">' +
+            '<input id="adInput" placeholder="örn. Ahmet Yılmaz" value="' + esc(state.ad) + '">' +
+            '<button class="btn-small" id="adKaydetBtn">Kaydet</button>' +
+          "</div>" +
+        "</div>" +
+
+        (tekMi || sahipMi ? "" :
+        '<div class="card card-pad">' +
+          '<div class="prod-name" style="margin-bottom:4px;">Yer Sahibinin E-postası</div>' +
+          '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Yer sahibini buraya ekleyince o seni otomatik görür, ayrıca bir şey yapmasına gerek yok.</div>' +
           '<div class="add-row">' +
             '<input id="bagliEpostaInput" type="email" inputmode="email" autocapitalize="none" autocorrect="off" placeholder="ornek@mail.com" value="' + esc(state.bagliEposta) + '">' +
             '<button class="btn-small" id="bagliKaydetBtn">Kaydet</button>' +
@@ -1188,12 +1347,8 @@
 
         (sahipMi ?
           '<div class="card card-pad">' +
-            '<div class="prod-name" style="margin-bottom:4px;">Naylon / Çift Parası</div>' +
-            '<div style="font-size:12px;color:#A89878;margin-bottom:10px;line-height:1.4;">Sezonluk sabit tutar. Ortakçının kasasından düşülür, senin payına eklenir.</div>' +
-            '<div class="add-row">' +
-              '<input id="naylonInput" inputmode="decimal" placeholder="0" value="' + (state.naylonParasi ? formatInput(String(state.naylonParasi).replace(".", ",")) : "") + '">' +
-              '<button class="btn-small" id="naylonKaydetBtn">Kaydet</button>' +
-            "</div>" +
+            '<div class="prod-name" style="margin-bottom:4px;">Ortakçılarım</div>' +
+            '<div style="font-size:12px;color:#A89878;line-height:1.4;">Ortakçıların seni kendi Ayarlar ekranından ekler. Senin e-postan: <b style="color:#5C4A34;">' + esc(benimEposta()) + "</b><br><br>Şu an bağlı: <b style=\"color:#5C4A34;\">" + ((state.karsiTaraflar || []).length) + ' ortakçı</b>. Naylon/çift parasını her ortakçı için ayrı ayrı <b>Ortaklık Hesabım</b> ekranından girersin.</div>' +
           "</div>" : "") +
 
         '<div class="card card-pad">' +
@@ -1778,6 +1933,34 @@
       drawSezonKarsilastirma();
     }
 
+    if (state.view === "ortaklik") {
+      document.querySelectorAll("[data-ortak-ac]").forEach(function (kart) {
+        kart.addEventListener("click", function () {
+          state.acikOrtakciEposta = kart.getAttribute("data-ortak-ac");
+          state.ayarMesaj = "";
+          render();
+        });
+      });
+      var geriBtn = document.getElementById("ortakGeriBtn");
+      if (geriBtn) geriBtn.addEventListener("click", function () {
+        state.acikOrtakciEposta = null;
+        state.ayarMesaj = "";
+        render();
+      });
+      var oNaylonBtn = document.getElementById("ortakNaylonKaydetBtn");
+      if (oNaylonBtn) {
+        var oNaylonInp = document.getElementById("ortakNaylonInput");
+        oNaylonInp.addEventListener("input", function () { oNaylonInp.value = formatInput(oNaylonInp.value); });
+        oNaylonBtn.addEventListener("click", function () {
+          if (!state.naylonlar) state.naylonlar = {};
+          state.naylonlar[state.acikOrtakciEposta] = parseNum(oNaylonInp.value);
+          state.ayarMesaj = "Naylon / çift parası kaydedildi.";
+          buluteKaydet(true);
+          render();
+        });
+      }
+    }
+
     if (state.view === "ayarlar") {
       rolSecenekleriniBagla("ayarRol", function (v) {
         if (state.rol === v) return;
@@ -1804,15 +1987,12 @@
         render();
       });
 
-      var naylonBtn = document.getElementById("naylonKaydetBtn");
-      if (naylonBtn) {
-        var naylonInp = document.getElementById("naylonInput");
-        naylonInp.addEventListener("input", function () {
-          naylonInp.value = formatInput(naylonInp.value);
-        });
-        naylonBtn.addEventListener("click", function () {
-          state.naylonParasi = parseNum(naylonInp.value);
-          state.ayarMesaj = "Naylon / çift parası kaydedildi.";
+      var adBtn = document.getElementById("adKaydetBtn");
+      if (adBtn) {
+        var adInp = document.getElementById("adInput");
+        adBtn.addEventListener("click", function () {
+          state.ad = String(adInp.value || "").trim();
+          state.ayarMesaj = "Ad kaydedildi.";
           buluteKaydet(true);
           render();
         });
