@@ -403,7 +403,11 @@
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return decPart !== undefined ? intPart + "," + decPart : intPart;
   }
-  var SURUM = "v13 · 27.07.2026";
+  var SURUM = "v14 · 28.07.2026";
+
+  /* ---- İLETİŞİM (numaranı buradan değiştir) ---- */
+  var DESTEK_TEL   = "905459494074";   // ülke kodu + numara, + ve boşluk YOK
+  var DESTEK_ISIM  = "Ramazan Sefa Dalgıç";
 
   /* ---------- İKONLAR (satır içi SVG, ek yükleme yok) ---------- */
   var IKON_YOLLARI = {
@@ -422,7 +426,8 @@
     arti:     '<path d="M12 5v14M5 12h14"/>',
     onay:     '<path d="M20 6.5 9.2 17.3 4 12.1"/>',
     yenile:   '<path d="M20.5 11.5a8.5 8.5 0 1 1-2.6-6.1"/><path d="M20.5 3.5v5.5H15"/>',
-    geri:     '<path d="M15.5 19.5 8 12l7.5-7.5"/>'
+    geri:     '<path d="M15.5 19.5 8 12l7.5-7.5"/>',
+    sohbet:   '<path d="M20.5 11.6a7.9 7.9 0 0 1-8.5 7.9 9 9 0 0 1-2.6-.4L4 20.5l1.5-4.6a7.7 7.7 0 0 1-1-3.9 7.9 7.9 0 0 1 8.5-7.5 7.9 7.9 0 0 1 7.5 7.1z"/>'
   };
 
   function ikon(ad, boyut, renk) {
@@ -475,6 +480,27 @@
     });
   }
 
+  function iletisimHtml(kayitMi) {
+    if (!DESTEK_TEL || DESTEK_TEL.indexOf("X") !== -1) return "";
+    var mesaj = kayitMi
+      ? "Merhaba, KomisyonCep için erişim kodu almak istiyorum."
+      : "Merhaba, KomisyonCep ile ilgili yardıma ihtiyacım var.";
+    var link = "https://wa.me/" + DESTEK_TEL + "?text=" + encodeURIComponent(mesaj);
+    return (
+      '<div style="margin-top:20px;text-align:center;max-width:320px;width:100%;">' +
+        '<div style="font-size:12px;color:var(--pencil);margin-bottom:9px;">' +
+          (kayitMi ? "Erişim kodun yok mu?" : "Yardıma mı ihtiyacın var?") +
+        "</div>" +
+        '<a href="' + link + '" target="_blank" rel="noopener" ' +
+          'style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:9px;' +
+          'border:1px solid #4A3D2B;color:var(--cream);text-decoration:none;font-size:13.5px;font-weight:600;">' +
+          ikon("sohbet", 17) + "WhatsApp'tan yaz" +
+        "</a>" +
+        (DESTEK_ISIM ? '<div style="font-size:11px;color:var(--pencil);margin-top:8px;">' + esc(DESTEK_ISIM) + "</div>" : "") +
+      "</div>"
+    );
+  }
+
   function renderAuth() {
     var kayitMi = authMod === "kayit";
     document.getElementById("root").innerHTML =
@@ -509,6 +535,7 @@
           "</button>" +
           (kayitMi ? "" : '<button id="sifreSifirlaBtn" style="background:none;border:none;color:#A89878;font-size:12px;padding:2px;">Şifremi unuttum</button>') +
         "</div>" +
+        iletisimHtml(kayitMi) +
       "</div>";
 
     var emailInp = document.getElementById("authEmail");
@@ -1328,6 +1355,13 @@
     );
   }
 
+  function ortakciDonumCiro(d, ciro) {
+    var alan = (d && d.arazi) || 0;
+    if (!alan || alan <= 0) return null;
+    var birim = (d && d.araziBirim) || "dönüm";
+    return { alan: alan, birim: birim, basina: ciro / alan };
+  }
+
   function ortakciGorunenAd(d) {
     return (d && d.ad && d.ad.trim()) ? d.ad.trim() : ((d && d.email) || "İsimsiz");
   }
@@ -1364,6 +1398,14 @@
               '<div class="line"><span class="lbl" style="font-weight:700;font-size:16px;color:#2B2118;">BU ORTAKÇIDAN PAYIM</span>' +
                 '<span style="font-weight:700;font-size:22px;color:' + (b.net >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
                 (b.net < 0 ? "− " : "") + tl(Math.abs(b.net)) + " ₺</span></div>" +
+              (function () {
+                var dc = ortakciDonumCiro(d, h.satis);
+                if (!dc) return '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--rule);font-size:11.5px;color:var(--pencil);">Bu ortakçı arazi büyüklüğünü girmemiş, ' + esc((d.araziBirim || "dönüm")) + " başına ciro hesaplanamıyor.</div>";
+                return '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--rule);">' +
+                  '<div class="line" style="font-size:12.5px;"><span class="lbl">Toplam ciro</span><span class="val">' + tl(h.satis) + " ₺</span></div>" +
+                  '<div class="line" style="font-size:12.5px;margin-top:3px;"><span class="lbl">' + kgFmt(dc.alan) + " " + dc.birim + ' · ' + dc.birim + ' başına ciro</span><span class="val strong">' + tl(dc.basina) + " ₺</span></div>" +
+                "</div>";
+              })() +
             "</div>" +
             '<div class="card card-pad">' +
               '<div class="prod-name" style="margin-bottom:4px;">Naylon / Çift Parası</div>' +
@@ -1393,7 +1435,13 @@
           '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">' +
             '<div style="min-width:0;">' +
               '<div class="prod-name" style="margin-bottom:2px;">' + esc(ortakciGorunenAd(d)) + "</div>" +
-              '<div style="font-size:11px;color:#A89878;">Toplam satış: ' + tl(satisToplam) + " ₺</div>" +
+              '<div style="font-size:11px;color:var(--pencil);">Toplam satış: ' + tl(satisToplam) + " ₺</div>" +
+              (function () {
+                var dc = ortakciDonumCiro(d, satisToplam);
+                if (!dc) return "";
+                return '<div style="font-size:11px;color:var(--pencil);margin-top:2px;font-variant-numeric:tabular-nums;">' +
+                  kgFmt(dc.alan) + " " + dc.birim + " · " + tl(dc.basina) + " ₺/" + dc.birim + "</div>";
+              })() +
             "</div>" +
             '<div style="text-align:right;flex-shrink:0;">' +
               '<div style="font-size:10px;color:#A89878;text-transform:uppercase;">Bana kazandırdığı</div>' +
