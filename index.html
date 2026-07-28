@@ -358,6 +358,20 @@
   }
 
   function uid() { return Math.random().toString(36).slice(2, 9); }
+  function trTarihMs(tarih) {
+    var p = String(tarih || "").split(".");
+    if (p.length !== 3) return 0;
+    return new Date(parseInt(p[2],10), parseInt(p[1],10)-1, parseInt(p[0],10)).getTime() || 0;
+  }
+  /* Hareketleri tarihe göre (yeniden eskiye), aynı gün içinde kayıt sırasına göre dizer */
+  function hareketSirala(liste) {
+    return (liste || []).slice().sort(function (a, b) {
+      var ga = trTarihMs(a.tarih), gb = trTarihMs(b.tarih);
+      if (gb !== ga) return gb - ga;
+      return (b.zaman || 0) - (a.zaman || 0);
+    });
+  }
+
   function bugun() {
     var d = new Date();
     return d.toLocaleDateString("tr-TR");
@@ -389,7 +403,7 @@
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return decPart !== undefined ? intPart + "," + decPart : intPart;
   }
-  var SURUM = "v12 · 27.07.2026";
+  var SURUM = "v13 · 27.07.2026";
 
   /* ---------- İKONLAR (satır içi SVG, ek yükleme yok) ---------- */
   var IKON_YOLLARI = {
@@ -899,9 +913,11 @@
       return '<div class="content"><div class="empty-note">Kasanın çalışması için önce bir ortakçının seni yer sahibi olarak eklemesi gerekiyor. Senin e-postan: <b>' + esc(benimEposta()) + "</b></div></div>";
     }
 
-    var pay = 0;
+    var pay = 0, toplamCiro = 0;
     state.karsiTaraflar.forEach(function (d) {
-      pay += ortaklikHesabi(d.ledger || [], ortakciNaylon(d.email)).sahip.net;
+      var hh = ortaklikHesabi(d.ledger || [], ortakciNaylon(d.email));
+      pay += hh.sahip.net;
+      toplamCiro += hh.satis;
     });
 
     var alinan = state.ledger.filter(function (t) { return t.tip === "odeme"; })
@@ -924,8 +940,7 @@
         "</div>";
     }
 
-    var sirali = state.ledger.filter(function (t) { return t.tip === "odeme"; })
-                             .sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    var sirali = hareketSirala(state.ledger.filter(function (t) { return t.tip === "odeme"; }));
     var txnHtml = sirali.length === 0
       ? '<div class="empty-note">Henüz para çekme kaydı yok.</div>'
       : sirali.map(function (t) {
@@ -953,7 +968,7 @@
             '<span style="font-weight:700;font-size:22px;color:' + (kalan >= 0 ? "#4A7A3F" : "#C1442E") + ';">' +
             (kalan < 0 ? "− " : "") + tl(Math.abs(kalan)) + " ₺</span></div>" +
           (kalan < 0 ? '<div style="font-size:12px;color:#C1442E;margin-top:4px;font-weight:600;">Payından fazla para almışsın.</div>' : "") +
-          araziSatiri(pay) +
+          araziSatiri(toplamCiro) +
         "</div>" +
         '<button class="btn btn-red" id="odemeToggleBtn">' + ikon("arti",18) + 'Para aldım</button>' +
         formHtml +
@@ -1032,7 +1047,7 @@
         "</div>";
     }
 
-    var sirali = state.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    var sirali = hareketSirala(state.ledger);
     var txnHtml = sirali.length === 0
       ? '<div class="empty-note">Henüz kayıt yok. Fiş hesaplayıp kasaya kaydet veya para aldığında buraya ekle.</div>'
       : sirali.map(function (t) {
@@ -1101,7 +1116,6 @@
           '<div class="section-label">Hareketler</div>' +
           txnHtml +
         "</div>" +
-        '<button class="btn-small" id="disaAktarBtn" style="width:100%;margin-top:6px;background:#5C4A34;">' + ikon("indir",17) + 'CSV indir</button>' +
         '<button class="btn btn-outline" id="yeniSezonBtn" style="margin-top:6px;">' + ikon("yenile",17) + 'Yeni sezona geç</button>' +
       "</div>"
     );
@@ -1249,8 +1263,7 @@
   }
 
   function satisHareketleriHtml(defter) {
-    var satislar = (defter || []).filter(function (t) { return t.tip === "satis"; })
-                                 .sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+    var satislar = hareketSirala((defter || []).filter(function (t) { return t.tip === "satis"; }));
     if (satislar.length === 0) return "";
 
     return (
@@ -1535,7 +1548,7 @@
       var acik = state.sezonAcikId === s.id;
       var detayHtml = "";
       if (acik) {
-        var sirali = s.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
+        var sirali = hareketSirala(s.ledger);
         detayHtml = '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">' +
           (sirali.length === 0 ? '<div class="empty-note">Kayıt yok.</div>' : sirali.map(function (tx) {
             var desc = tx.tip === "satis" ? tx.grup : tx.aciklama;
@@ -1582,7 +1595,7 @@
       })
       .filter(function (x) { return x.net > 0; })
       .map(function (x) {
-        return { id: uid(), tip: "satis", tarih: x.tarih, grup: x.grup, kg: x.kg, fiyat: x.fiyat, tutar: x.net, kalite: x.kalite, oran: x.oran, komisyon: x.komisyon, tutarBrut: x.tutarBrut };
+        return { id: uid(), zaman: Date.now(), tip: "satis", tarih: x.tarih, grup: x.grup, kg: x.kg, fiyat: x.fiyat, tutar: x.net, kalite: x.kalite, oran: x.oran, komisyon: x.komisyon, tutarBrut: x.tutarBrut };
       });
     if (entries.length === 0) return;
     state.ledger = entries.concat(state.ledger);
@@ -1600,7 +1613,7 @@
     var t = parseNum(state.odemeTutar);
     if (t <= 0) return;
     state.ledger = [{
-      id: uid(), tip: "odeme", tarih: bugun(),
+      id: uid(), zaman: Date.now(), tip: "odeme", tarih: bugun(),
       aciklama: state.odemeAciklama.trim() || "Halden alınan ödeme",
       tutar: t
     }].concat(state.ledger);
@@ -1612,7 +1625,7 @@
     var t = parseNum(state.bakiyeTutar);
     if (t <= 0) return;
     state.ledger = [{
-      id: uid(), tip: "bakiye", tarih: bugun(),
+      id: uid(), zaman: Date.now(), tip: "bakiye", tarih: bugun(),
       aciklama: state.bakiyeAciklama.trim() || "Devreden bakiye",
       tutar: t
     }].concat(state.ledger);
@@ -1627,7 +1640,7 @@
     var t = parseNum(state.giderTutar);
     if (t <= 0) return;
     state.ledger = [{
-      id: uid(), tip: "gider", giderTur: state.giderTur, tarih: bugun(),
+      id: uid(), zaman: Date.now(), tip: "gider", giderTur: state.giderTur, tarih: bugun(),
       aciklama: state.giderAciklama.trim() || GIDER_ETIKET[state.giderTur],
       tutar: t
     }].concat(state.ledger);
@@ -1652,99 +1665,78 @@
     var idx = parseInt(parts[0], 10) - 1;
     return (aylar[idx] || parts[0]) + " " + String(parts[1]).slice(2);
   }
-  function drawBarsOnCanvas(canvasId, items, opts) {
-    var canvas = document.getElementById(canvasId);
-    if (!canvas) return;
-    var ctx = canvas.getContext("2d");
-    var w = canvas.width, h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
-    if (items.length === 0) {
-      ctx.fillStyle = "#A89878";
-      ctx.font = "13px -apple-system";
-      ctx.fillText("Henüz veri yok", 10, h / 2);
-      return;
-    }
-
-    var maxVal = Math.max.apply(null, items.map(function (it) { return Math.abs(it.value); })) || 1;
-    var padding = 20;
-    var barAreaW = w - padding * 2;
-    var barAreaH = h - 34;
-    var gap = (opts && opts.gap) || 12;
-    var barW = (barAreaW - gap * (items.length - 1)) / items.length;
-
-    items.forEach(function (it, i) {
-      var barH = (Math.abs(it.value) / maxVal) * (barAreaH - 16);
-      var x = padding + i * (barW + gap);
-      var y = barAreaH - barH + 6;
-      ctx.fillStyle = it.color || "#C1442E";
-      ctx.beginPath();
-      if (ctx.roundRect) { ctx.roundRect(x, y, barW, barH, 4); ctx.fill(); }
-      else { ctx.fillRect(x, y, barW, barH); }
-
-      ctx.fillStyle = "#2B2118";
-      ctx.font = "9px -apple-system";
-      ctx.textAlign = "center";
-      ctx.fillText(kgFmt(Math.round(it.value)), x + barW / 2, Math.max(y - 5, 10));
-
-      ctx.fillStyle = "#5C4A34";
-      ctx.font = "10px -apple-system";
-      ctx.fillText(it.label, x + barW / 2, barAreaH + 18);
-    });
-  }
-
-  function drawKasaChart() {
-    var map = {};
-    state.ledger.filter(function (t) { return t.tip === "satis"; }).forEach(function (t) {
-      var k = ayAnahtari(t.tarih);
-      map[k] = (map[k] || 0) + t.tutar;
-    });
-    var keys = Object.keys(map).sort(function (a, b) {
-      var pa = a.split("."), pb = b.split(".");
-      return new Date(parseInt(pa[1], 10), parseInt(pa[0], 10) - 1, 1) - new Date(parseInt(pb[1], 10), parseInt(pb[0], 10) - 1, 1);
-    });
-    keys = keys.slice(-6);
-    var items = keys.map(function (k) { return { label: ayEtiketi(k), value: map[k], color: "#C1442E" }; });
-    drawBarsOnCanvas("kasaChart", items);
-  }
+  /* ---------- GRAFİKLER (HTML tabanlı, her ekranda net) ---------- */
 
   function sonSezon() {
     return state.sezonlar.length > 0 ? state.sezonlar[0] : null;
   }
 
-  function drawSezonKarsilastirma() {
-    var son = sonSezon();
-    var buSezon = sezonTotals(state.ledger);
-    var gecenSezon = son ? sezonTotals(son.ledger) : { satis: 0, gider: 0, odeme: 0, kalan: 0 };
-
-    drawBarsOnCanvas("chartSatis", [
-      { label: "Bu Sezon", value: buSezon.satis, color: "#4A7A3F" },
-      { label: "Geçen Sezon", value: gecenSezon.satis, color: "#A89878" }
-    ]);
-    drawBarsOnCanvas("chartGider", [
-      { label: "Bu Sezon", value: buSezon.gider + buSezon.odeme, color: "#C1442E" },
-      { label: "Geçen Sezon", value: gecenSezon.gider + gecenSezon.odeme, color: "#A89878" }
-    ]);
-    drawBarsOnCanvas("chartKalan", [
-      { label: "Bu Sezon", value: buSezon.kalan, color: "#4A7A3F" },
-      { label: "Geçen Sezon", value: gecenSezon.kalan, color: "#A89878" }
-    ]);
-
-    var buFiyat = ortalamaKgFiyati(state.ledger);
-    var gecenFiyat = son ? ortalamaKgFiyati(son.ledger) : 0;
-    drawBarsOnCanvas("chartFiyat", [
-      { label: "Bu Sezon", value: buFiyat, color: "#E8A33D" },
-      { label: "Geçen Sezon", value: gecenFiyat, color: "#A89878" }
-    ]);
-  }
-
   function ortalamaKgFiyati(ledger) {
     var toplamTutar = 0, toplamKg = 0;
-    ledger.filter(function (t) { return t.tip === "satis" && t.kg; }).forEach(function (t) {
+    (ledger || []).filter(function (t) { return t.tip === "satis" && t.kg; }).forEach(function (t) {
       toplamTutar += (t.fiyat || 0) * t.kg;
       toplamKg += t.kg;
     });
     return toplamKg > 0 ? toplamTutar / toplamKg : 0;
+  }
+
+  /* Dikey ince çubuklar: aylık trend için */
+  function dikeyBarlar(veri, renk) {
+    if (!veri.length) return '<div class="empty-note">Henüz veri yok.</div>';
+    var max = Math.max.apply(null, veri.map(function (v) { return Math.abs(v.deger); })) || 1;
+    var sutunlar = veri.map(function (v) {
+      var yuzde = Math.max(3, Math.round((Math.abs(v.deger) / max) * 100));
+      return (
+        '<div style="flex:1;max-width:52px;height:100%;display:flex;flex-direction:column;">' +
+          '<div style="font-size:10px;color:var(--pencil);text-align:center;font-variant-numeric:tabular-nums;margin-bottom:5px;">' +
+            kgFmt(Math.round(v.deger)) + "</div>" +
+          '<div style="flex:1;display:flex;align-items:flex-end;">' +
+            '<div style="width:100%;height:' + yuzde + '%;background:' + renk + ';border-radius:3px 3px 0 0;"></div>' +
+          "</div>" +
+        "</div>"
+      );
+    }).join("");
+    var etiketler = veri.map(function (v) {
+      return '<div style="flex:1;max-width:52px;text-align:center;font-size:10px;color:var(--pencil);">' + esc(v.etiket) + "</div>";
+    }).join("");
+    return (
+      '<div style="display:flex;align-items:flex-end;gap:12px;height:118px;">' + sutunlar + "</div>" +
+      '<div style="height:1px;background:var(--rule);margin:6px 0 5px;"></div>' +
+      '<div style="display:flex;gap:12px;">' + etiketler + "</div>"
+    );
+  }
+
+  /* Yatay karşılaştırma çubukları: bu sezon / geçen sezon */
+  function yatayKarsilastirma(satirlar, birim) {
+    var max = Math.max.apply(null, satirlar.map(function (r) { return Math.abs(r.deger); })) || 1;
+    return satirlar.map(function (r, i) {
+      var yuzde = Math.max(1.5, (Math.abs(r.deger) / max) * 100);
+      var renk = r.renk || (i === 0 ? "var(--field)" : "var(--pencil-lt)");
+      return (
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:' + (i === satirlar.length - 1 ? "0" : "9px") + ';">' +
+          '<div style="width:78px;flex-shrink:0;font-size:11.5px;color:#5C4A34;">' + esc(r.etiket) + "</div>" +
+          '<div style="flex:1;min-width:0;background:#E8E0CD;border-radius:3px;height:16px;overflow:hidden;">' +
+            '<div style="width:' + yuzde + '%;background:' + renk + ';height:100%;border-radius:3px;"></div>' +
+          "</div>" +
+          '<div style="width:86px;flex-shrink:0;text-align:right;font-size:12px;font-weight:600;color:#2B2118;font-variant-numeric:tabular-nums;">' +
+            tl(r.deger) + " " + (birim || "₺") + "</div>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function aylikVeri() {
+    var map = {};
+    state.ledger.filter(function (t) { return t.tip === "satis"; }).forEach(function (t) {
+      var k = ayAnahtari(t.tarih);
+      map[k] = (map[k] || 0) + t.tutar;
+    });
+    return Object.keys(map).sort(function (a, b) {
+      var pa = a.split("."), pb = b.split(".");
+      return new Date(parseInt(pa[1], 10), parseInt(pa[0], 10) - 1, 1) - new Date(parseInt(pb[1], 10), parseInt(pb[0], 10) - 1, 1);
+    }).slice(-6).map(function (k) {
+      return { etiket: ayEtiketi(k), deger: map[k] };
+    });
   }
 
   function urunKarsilastirmaListesi() {
@@ -1766,28 +1758,36 @@
     }).sort(function (a, b) { return (b.bu + b.gecen) - (a.bu + a.gecen); }).slice(0, 8);
   }
 
+  function grafikKarti(baslik, icerik) {
+    return '<div class="card card-pad"><div class="prod-name" style="margin-bottom:12px;">' + baslik + "</div>" + icerik + "</div>";
+  }
+
   function renderGrafikler() {
     var son = sonSezon();
-    var urunListesi = urunKarsilastirmaListesi();
-    var maxUrunVal = Math.max.apply(null, urunListesi.map(function (u) { return Math.max(u.bu, u.gecen); })) || 1;
+    var bu = sezonTotals(state.ledger);
+    var gecen = son ? sezonTotals(son.ledger) : { satis: 0, gider: 0, odeme: 0, kalan: 0 };
+    var buFiyat = ortalamaKgFiyati(state.ledger);
+    var gecenFiyat = son ? ortalamaKgFiyati(son.ledger) : 0;
 
-    var urunBarsHtml = urunListesi.length === 0
+    var urunListesi = urunKarsilastirmaListesi();
+    var maxUrun = Math.max.apply(null, urunListesi.map(function (u) { return Math.max(u.bu, u.gecen); })) || 1;
+    var urunHtml = urunListesi.length === 0
       ? '<div class="empty-note">Henüz ürün satışı yok.</div>'
-      : urunListesi.map(function (u) {
-          var buPct = Math.round((u.bu / maxUrunVal) * 100);
-          var gecenPct = Math.round((u.gecen / maxUrunVal) * 100);
+      : urunListesi.map(function (u, i) {
+          var buP = Math.max(1.5, (u.bu / maxUrun) * 100);
+          var gcP = Math.max(1.5, (u.gecen / maxUrun) * 100);
           return (
-            '<div style="margin-bottom:12px;">' +
-              '<div style="font-size:13px;font-weight:600;color:#2B2118;margin-bottom:4px;">' + esc(u.ad) + "</div>" +
-              '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">' +
-                '<div style="width:62px;font-size:10px;color:#5C4A34;">Bu sezon</div>' +
-                '<div style="flex:1;background:#EDE6D6;border-radius:4px;height:14px;overflow:hidden;"><div style="width:' + buPct + '%;background:#4A7A3F;height:100%;"></div></div>' +
-                '<div style="width:70px;font-size:11px;text-align:right;color:#2B2118;">' + tl(u.bu) + " ₺</div>" +
+            '<div style="' + (i === urunListesi.length - 1 ? "" : "margin-bottom:14px;") + '">' +
+              '<div style="font-size:13px;font-weight:600;color:#2B2118;margin-bottom:6px;">' + esc(u.ad) + "</div>" +
+              '<div style="display:flex;align-items:center;gap:9px;margin-bottom:5px;">' +
+                '<div style="width:70px;flex-shrink:0;font-size:10.5px;color:var(--pencil);">Bu sezon</div>' +
+                '<div style="flex:1;min-width:0;background:#E8E0CD;border-radius:3px;height:13px;overflow:hidden;"><div style="width:' + buP + '%;background:var(--field);height:100%;border-radius:3px;"></div></div>' +
+                '<div style="width:84px;flex-shrink:0;text-align:right;font-size:11.5px;color:#2B2118;font-weight:600;font-variant-numeric:tabular-nums;">' + tl(u.bu) + " ₺</div>" +
               "</div>" +
-              '<div style="display:flex;align-items:center;gap:6px;">' +
-                '<div style="width:62px;font-size:10px;color:#5C4A34;">Geçen sezon</div>' +
-                '<div style="flex:1;background:#EDE6D6;border-radius:4px;height:14px;overflow:hidden;"><div style="width:' + gecenPct + '%;background:#A89878;height:100%;"></div></div>' +
-                '<div style="width:70px;font-size:11px;text-align:right;color:#2B2118;">' + tl(u.gecen) + " ₺</div>" +
+              '<div style="display:flex;align-items:center;gap:9px;">' +
+                '<div style="width:70px;flex-shrink:0;font-size:10.5px;color:var(--pencil);">Geçen sezon</div>' +
+                '<div style="flex:1;min-width:0;background:#E8E0CD;border-radius:3px;height:13px;overflow:hidden;"><div style="width:' + gcP + '%;background:var(--pencil-lt);height:100%;border-radius:3px;"></div></div>' +
+                '<div style="width:84px;flex-shrink:0;text-align:right;font-size:11.5px;color:#2B2118;font-weight:600;font-variant-numeric:tabular-nums;">' + tl(u.gecen) + " ₺</div>" +
               "</div>" +
             "</div>"
           );
@@ -1795,65 +1795,27 @@
 
     return (
       '<div class="content">' +
-        '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">Aylık satış trendi</div>' +
-          '<canvas id="kasaChart" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
-        "</div>" +
-        (son ? "" : '<div class="empty-note">Sezon karşılaştırması için Kasa Defterim\'de "Yeni Sezona Geç" ile en az bir sezonu arşivlemen gerekiyor. Aşağıdaki grafikler o zaman dolacak.</div>') +
-        '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">Toplam satış · bu sezon ve geçen sezon</div>' +
-          '<canvas id="chartSatis" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
-        "</div>" +
-        '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">Toplam gider · bu sezon ve geçen sezon</div>' +
-          '<canvas id="chartGider" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
-        "</div>" +
-        '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">Net kalan bakiye</div>' +
-          '<canvas id="chartKalan" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
-        "</div>" +
-        '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:8px;">Ortalama ₺/kg fiyatı</div>' +
-          '<canvas id="chartFiyat" width="300" height="150" style="width:100%;height:150px;display:block;"></canvas>' +
-        "</div>" +
-        '<div class="card card-pad">' +
-          '<div class="prod-name" style="margin-bottom:10px;">Ürün bazlı kazanç karşılaştırması</div>' +
-          urunBarsHtml +
-        "</div>" +
+        grafikKarti("Aylık satış trendi", dikeyBarlar(aylikVeri(), "var(--field)")) +
+        (son ? "" : '<div class="empty-note">Sezon karşılaştırması için Kasa Defterim\'de \u201cYeni sezona geç\u201d ile en az bir sezonu arşivlemen gerekiyor.</div>') +
+        grafikKarti("Toplam satış", yatayKarsilastirma([
+          { etiket: "Bu sezon", deger: bu.satis },
+          { etiket: "Geçen sezon", deger: gecen.satis }
+        ])) +
+        grafikKarti("Toplam gider", yatayKarsilastirma([
+          { etiket: "Bu sezon", deger: bu.gider + bu.odeme, renk: "var(--stamp)" },
+          { etiket: "Geçen sezon", deger: gecen.gider + gecen.odeme, renk: "var(--pencil-lt)" }
+        ])) +
+        grafikKarti("Net kalan bakiye", yatayKarsilastirma([
+          { etiket: "Bu sezon", deger: bu.kalan },
+          { etiket: "Geçen sezon", deger: gecen.kalan }
+        ])) +
+        grafikKarti("Ortalama ₺/kg", yatayKarsilastirma([
+          { etiket: "Bu sezon", deger: buFiyat },
+          { etiket: "Geçen sezon", deger: gecenFiyat }
+        ])) +
+        grafikKarti("Ürün bazlı kazanç", urunHtml) +
       "</div>"
     );
-  }
-
-  function csvKacir(v) {
-    return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
-  }
-  function disaAktarCSV() {
-    if (state.ledger.length === 0) { alert("Aktarılacak kayıt yok."); return; }
-    var header = ["Tarih", "Tür", "Açıklama/Ürün", "Kalite", "Kg", "Fiyat (₺/kg)", "Komisyon %", "Tutar (₺)"];
-    var sirali = state.ledger.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
-    var lines = [header.map(csvKacir).join(",")];
-    sirali.forEach(function (t) {
-      var tur = t.tip === "satis" ? "Satış" : (t.tip === "bakiye" ? "Devreden Bakiye" : (t.tip === "gider" ? (GIDER_ETIKET[t.giderTur] || "Gider") : "Ödeme Alındı"));
-      var aciklama = t.tip === "satis" ? t.grup : t.aciklama;
-      lines.push([
-        t.tarih, tur, aciklama,
-        t.tip === "satis" ? (t.kalite || "") : "",
-        t.tip === "satis" && t.kg ? kgFmt(t.kg) : "",
-        t.tip === "satis" && t.fiyat ? tl(t.fiyat) : "",
-        t.tip === "satis" && t.oran ? t.oran : "",
-        tl(t.tutar)
-      ].map(csvKacir).join(","));
-    });
-    var csv = "\uFEFF" + lines.join("\r\n");
-    var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = "hal-kasa-defteri-" + todayISO() + ".csv";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
   }
 
   function printReceipt(id) {
@@ -1914,7 +1876,7 @@
     state.sezonlar = [sezon].concat(state.sezonlar);
     persistSezonlar();
     state.ledger = carry !== 0
-      ? [{ id: uid(), tip: "bakiye", tarih: bugun(), aciklama: "Devreden bakiye (" + adFinal + ")", tutar: carry }]
+      ? [{ id: uid(), zaman: Date.now(), tip: "bakiye", tarih: bugun(), aciklama: "Devreden bakiye (" + adFinal + ")", tutar: carry }]
       : [];
     persistLedger();
     render();
@@ -2056,8 +2018,6 @@
       });
       var yeniSezonBtn = document.getElementById("yeniSezonBtn");
       if (yeniSezonBtn) yeniSezonBtn.addEventListener("click", yeniSezonaGec);
-      var disaAktarBtn = document.getElementById("disaAktarBtn");
-      if (disaAktarBtn) disaAktarBtn.addEventListener("click", disaAktarCSV);
     }
 
     if (state.view === "urunler") {
@@ -2082,11 +2042,6 @@
       document.querySelectorAll("[data-del-sezon]").forEach(function (btn) {
         btn.addEventListener("click", function () { silSezon(btn.getAttribute("data-del-sezon")); });
       });
-    }
-
-    if (state.view === "grafikler") {
-      drawKasaChart();
-      drawSezonKarsilastirma();
     }
 
     if (state.view === "ortaklik") {
